@@ -44,6 +44,9 @@ import {
   Loader2,
   Check,
   FolderOpen,
+  Maximize2,
+  Minimize2,
+  Move,
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
@@ -89,8 +92,10 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
       }),
       Underline,
       Image.configure({
+        inline: false,
+        allowBase64: true,
         HTMLAttributes: {
-          class: 'rounded-lg max-w-full',
+          class: 'rounded-lg cursor-pointer transition-all',
         },
       }),
       Link.configure({
@@ -633,6 +638,99 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Image Controls - Shows when image is selected */}
+      {editor?.isActive('image') && (
+        <div className="flex flex-wrap items-center gap-1 p-2 border-b bg-blue-50 dark:bg-blue-950/30">
+          <span className="text-xs text-muted-foreground ml-2">حجم الصورة:</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              editor.chain().focus().updateAttributes('image', { 
+                style: 'width: 25%; height: auto;' 
+              }).run();
+            }}
+          >
+            <Minimize2 className="h-3 w-3 ml-1" />
+            صغير
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              editor.chain().focus().updateAttributes('image', { 
+                style: 'width: 50%; height: auto;' 
+              }).run();
+            }}
+          >
+            <Move className="h-3 w-3 ml-1" />
+            متوسط
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              editor.chain().focus().updateAttributes('image', { 
+                style: 'width: 100%; height: auto;' 
+              }).run();
+            }}
+          >
+            <Maximize2 className="h-3 w-3 ml-1" />
+            كامل
+          </Button>
+          <Separator orientation="vertical" className="h-5 mx-1" />
+          <span className="text-xs text-muted-foreground ml-2">المحاذاة:</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              editor.chain().focus().updateAttributes('image', { 
+                style: 'width: 50%; height: auto; float: right; margin-left: 1rem; margin-bottom: 0.5rem;' 
+              }).run();
+            }}
+          >
+            <AlignRight className="h-3 w-3 ml-1" />
+            يمين
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              editor.chain().focus().updateAttributes('image', { 
+                style: 'width: 50%; height: auto; display: block; margin: 0 auto;' 
+              }).run();
+            }}
+          >
+            <AlignCenter className="h-3 w-3 ml-1" />
+            وسط
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              editor.chain().focus().updateAttributes('image', { 
+                style: 'width: 50%; height: auto; float: left; margin-right: 1rem; margin-bottom: 0.5rem;' 
+              }).run();
+            }}
+          >
+            <AlignLeft className="h-3 w-3 ml-1" />
+            يسار
+          </Button>
+        </div>
+      )}
 
       {/* Editor */}
       <EditorContent editor={editor} />
