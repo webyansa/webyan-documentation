@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState, memo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,7 @@ import { Switch } from '@/components/ui/switch';
 import { Plus, ChevronDown, ChevronLeft, FolderOpen, FileText, Edit, Trash2, Loader2, Eye, EyeOff, GripVertical } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { useContentTree, Module, Submodule } from '@/hooks/useContentTree';
 import {
   DndContext,
   closestCenter,
@@ -53,213 +54,16 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-interface Article {
-  id: string;
-  title: string;
-  slug: string;
-  status: string;
-}
-
-interface Submodule {
-  id: string;
-  slug: string;
-  title: string;
-  description: string | null;
-  sort_order: number;
-  is_published: boolean;
-  articles: Article[];
-}
-
-interface Module {
-  id: string;
-  slug: string;
-  title: string;
-  description: string | null;
-  icon: string | null;
-  sort_order: number;
-  is_published: boolean;
-  submodules: Submodule[];
-}
-
-// Sortable Module Item Component
-function SortableModuleItem({
-  module,
-  openModules,
-  toggleModule,
-  openEditModuleDialog,
-  setSelectedModule,
-  setDeleteModuleDialogOpen,
-  setSelectedModuleId,
-  setSubmoduleDialogOpen,
-  openEditSubmoduleDialog,
-  setSelectedSubmodule,
-  setDeleteSubmoduleDialogOpen,
-  isAdmin,
-  onSubmodulesReorder,
-}: {
-  module: Module;
-  openModules: string[];
-  toggleModule: (id: string) => void;
-  openEditModuleDialog: (module: Module) => void;
-  setSelectedModule: (module: Module | null) => void;
-  setDeleteModuleDialogOpen: (open: boolean) => void;
-  setSelectedModuleId: (id: string | null) => void;
-  setSubmoduleDialogOpen: (open: boolean) => void;
-  openEditSubmoduleDialog: (submodule: Submodule) => void;
-  setSelectedSubmodule: (submodule: Submodule | null) => void;
-  setDeleteSubmoduleDialogOpen: (open: boolean) => void;
-  isAdmin: boolean;
-  onSubmodulesReorder: (moduleId: string, submodules: Submodule[]) => void;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: module.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const handleSubmoduleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      const oldIndex = module.submodules.findIndex((s) => s.id === active.id);
-      const newIndex = module.submodules.findIndex((s) => s.id === over.id);
-      const newSubmodules = arrayMove(module.submodules, oldIndex, newIndex);
-      onSubmodulesReorder(module.id, newSubmodules);
-    }
-  };
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      <Collapsible
-        open={openModules.includes(module.id)}
-        onOpenChange={() => toggleModule(module.id)}
-      >
-        <div className="border rounded-lg">
-          <CollapsibleTrigger className="flex items-center justify-between w-full p-4 hover:bg-muted/50 transition-colors">
-            <div className="flex items-center gap-3">
-              <button
-                {...attributes}
-                {...listeners}
-                className="cursor-grab hover:text-primary p-1"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <GripVertical className="h-4 w-4 text-muted-foreground" />
-              </button>
-              {openModules.includes(module.id) ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-              )}
-              <FolderOpen className="h-5 w-5 text-primary" />
-              <span className="font-medium">{module.title}</span>
-              <Badge variant="secondary" className="text-xs">
-                {module.submodules.length} قسم
-              </Badge>
-              {!module.is_published && (
-                <Badge variant="outline" className="text-xs gap-1">
-                  <EyeOff className="h-3 w-3" />
-                  مخفي
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => openEditModuleDialog(module)}
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-              {isAdmin && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => {
-                    setSelectedModule(module);
-                    setDeleteModuleDialogOpen(true);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedModuleId(module.id);
-                  setSubmoduleDialogOpen(true);
-                }}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="border-t px-4 py-2 space-y-1">
-              {module.submodules.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2 pr-8">
-                  لا توجد أقسام فرعية
-                </p>
-              ) : (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleSubmoduleDragEnd}
-                >
-                  <SortableContext
-                    items={module.submodules.map((s) => s.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {module.submodules.map((submodule) => (
-                      <SortableSubmoduleItem
-                        key={submodule.id}
-                        submodule={submodule}
-                        openEditSubmoduleDialog={openEditSubmoduleDialog}
-                        setSelectedSubmodule={setSelectedSubmodule}
-                        setDeleteSubmoduleDialogOpen={setDeleteSubmoduleDialogOpen}
-                        isAdmin={isAdmin}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-              )}
-            </div>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
-    </div>
-  );
-}
-
 // Sortable Submodule Item Component
-function SortableSubmoduleItem({
+const SortableSubmoduleItem = memo(function SortableSubmoduleItem({
   submodule,
-  openEditSubmoduleDialog,
-  setSelectedSubmodule,
-  setDeleteSubmoduleDialogOpen,
+  onEdit,
+  onDelete,
   isAdmin,
 }: {
   submodule: Submodule;
-  openEditSubmoduleDialog: (submodule: Submodule) => void;
-  setSelectedSubmodule: (submodule: Submodule | null) => void;
-  setDeleteSubmoduleDialogOpen: (open: boolean) => void;
+  onEdit: (submodule: Submodule) => void;
+  onDelete: (submodule: Submodule) => void;
   isAdmin: boolean;
 }) {
   const {
@@ -305,7 +109,7 @@ function SortableSubmoduleItem({
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => openEditSubmoduleDialog(submodule)}
+            onClick={() => onEdit(submodule)}
           >
             <Edit className="h-3 w-3" />
           </Button>
@@ -314,10 +118,7 @@ function SortableSubmoduleItem({
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-destructive hover:text-destructive"
-              onClick={() => {
-                setSelectedSubmodule(submodule);
-                setDeleteSubmoduleDialogOpen(true);
-              }}
+              onClick={() => onDelete(submodule)}
             >
               <Trash2 className="h-3 w-3" />
             </Button>
@@ -356,12 +157,165 @@ function SortableSubmoduleItem({
       )}
     </div>
   );
-}
+});
+
+// Sortable Module Item Component
+const SortableModuleItem = memo(function SortableModuleItem({
+  module,
+  isOpen,
+  onToggle,
+  onEdit,
+  onDelete,
+  onAddSubmodule,
+  onEditSubmodule,
+  onDeleteSubmodule,
+  onSubmodulesReorder,
+  isAdmin,
+}: {
+  module: Module;
+  isOpen: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onAddSubmodule: () => void;
+  onEditSubmodule: (submodule: Submodule) => void;
+  onDeleteSubmodule: (submodule: Submodule) => void;
+  onSubmodulesReorder: (newSubmodules: Submodule[]) => void;
+  isAdmin: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: module.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleSubmoduleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = module.submodules.findIndex((s) => s.id === active.id);
+      const newIndex = module.submodules.findIndex((s) => s.id === over.id);
+      const newSubmodules = arrayMove(module.submodules, oldIndex, newIndex);
+      onSubmodulesReorder(newSubmodules);
+    }
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <Collapsible open={isOpen} onOpenChange={onToggle}>
+        <div className="border rounded-lg">
+          <CollapsibleTrigger className="flex items-center justify-between w-full p-4 hover:bg-muted/50 transition-colors">
+            <div className="flex items-center gap-3">
+              <button
+                {...attributes}
+                {...listeners}
+                className="cursor-grab hover:text-primary p-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground" />
+              </button>
+              {isOpen ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+              )}
+              <FolderOpen className="h-5 w-5 text-primary" />
+              <span className="font-medium">{module.title}</span>
+              <Badge variant="secondary" className="text-xs">
+                {module.submodules.length} قسم
+              </Badge>
+              {!module.is_published && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <EyeOff className="h-3 w-3" />
+                  مخفي
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
+                <Edit className="h-4 w-4" />
+              </Button>
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  onClick={onDelete}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={onAddSubmodule}>
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-4 py-2 space-y-1">
+              {module.submodules.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2 pr-8">
+                  لا توجد أقسام فرعية
+                </p>
+              ) : (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleSubmoduleDragEnd}
+                >
+                  <SortableContext
+                    items={module.submodules.map((s) => s.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {module.submodules.map((submodule) => (
+                      <SortableSubmoduleItem
+                        key={submodule.id}
+                        submodule={submodule}
+                        onEdit={onEditSubmodule}
+                        onDelete={onDeleteSubmodule}
+                        isAdmin={isAdmin}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              )}
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    </div>
+  );
+});
 
 export default function ContentTreePage() {
   const { isAdmin } = useAuth();
-  const [modules, setModules] = useState<Module[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    modules,
+    loading,
+    addModuleOptimistic,
+    updateModuleOptimistic,
+    deleteModuleOptimistic,
+    addSubmoduleOptimistic,
+    updateSubmoduleOptimistic,
+    deleteSubmoduleOptimistic,
+    reorderModules,
+    reorderSubmodules,
+  } = useContentTree();
+
   const [openModules, setOpenModules] = useState<string[]>([]);
   
   // Module dialogs
@@ -397,67 +351,13 @@ export default function ContentTreePage() {
     })
   );
 
-  useEffect(() => {
-    fetchModules();
-  }, []);
-
-  const fetchModules = async () => {
-    try {
-      const { data: modulesData, error: modulesError } = await supabase
-        .from('docs_modules')
-        .select('*')
-        .order('sort_order');
-
-      if (modulesError) throw modulesError;
-
-      const modulesWithSubmodules: Module[] = [];
-
-      for (const module of modulesData || []) {
-        const { data: submodulesData, error: submodulesError } = await supabase
-          .from('docs_submodules')
-          .select('*')
-          .eq('module_id', module.id)
-          .order('sort_order');
-
-        if (submodulesError) throw submodulesError;
-
-        const submodulesWithArticles: Submodule[] = [];
-
-        for (const submodule of submodulesData || []) {
-          const { data: articlesData } = await supabase
-            .from('docs_articles')
-            .select('id, title, slug, status')
-            .eq('submodule_id', submodule.id)
-            .order('sort_order');
-
-          submodulesWithArticles.push({
-            ...submodule,
-            articles: articlesData || [],
-          });
-        }
-
-        modulesWithSubmodules.push({
-          ...module,
-          submodules: submodulesWithArticles,
-        });
-      }
-
-      setModules(modulesWithSubmodules);
-    } catch (error) {
-      console.error('Error fetching modules:', error);
-      toast.error('حدث خطأ أثناء تحميل شجرة المحتوى');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const toggleModule = (moduleId: string) => {
+  const toggleModule = useCallback((moduleId: string) => {
     setOpenModules((prev) =>
       prev.includes(moduleId)
         ? prev.filter((id) => id !== moduleId)
         : [...prev, moduleId]
     );
-  };
+  }, []);
 
   const generateSlug = (title: string) => {
     return title
@@ -473,46 +373,40 @@ export default function ContentTreePage() {
       const oldIndex = modules.findIndex((m) => m.id === active.id);
       const newIndex = modules.findIndex((m) => m.id === over.id);
       const newModules = arrayMove(modules, oldIndex, newIndex);
-      setModules(newModules);
+      
+      // Optimistic update
+      reorderModules(newModules);
 
-      // Update sort_order in database
+      // Update in database
       try {
-        for (let i = 0; i < newModules.length; i++) {
-          await supabase
-            .from('docs_modules')
-            .update({ sort_order: i })
-            .eq('id', newModules[i].id);
-        }
+        await Promise.all(
+          newModules.map((m, i) =>
+            supabase.from('docs_modules').update({ sort_order: i }).eq('id', m.id)
+          )
+        );
         toast.success('تم تحديث ترتيب الوحدات');
       } catch (error) {
         console.error('Error updating module order:', error);
         toast.error('حدث خطأ أثناء تحديث الترتيب');
-        fetchModules();
       }
     }
   };
 
   // Handle submodules reorder
   const handleSubmodulesReorder = async (moduleId: string, newSubmodules: Submodule[]) => {
-    setModules((prev) =>
-      prev.map((m) =>
-        m.id === moduleId ? { ...m, submodules: newSubmodules } : m
-      )
-    );
+    // Optimistic update
+    reorderSubmodules(moduleId, newSubmodules);
 
-    // Update sort_order in database
     try {
-      for (let i = 0; i < newSubmodules.length; i++) {
-        await supabase
-          .from('docs_submodules')
-          .update({ sort_order: i })
-          .eq('id', newSubmodules[i].id);
-      }
+      await Promise.all(
+        newSubmodules.map((s, i) =>
+          supabase.from('docs_submodules').update({ sort_order: i }).eq('id', s.id)
+        )
+      );
       toast.success('تم تحديث ترتيب الأقسام');
     } catch (error) {
       console.error('Error updating submodule order:', error);
       toast.error('حدث خطأ أثناء تحديث الترتيب');
-      fetchModules();
     }
   };
 
@@ -524,21 +418,28 @@ export default function ContentTreePage() {
     }
 
     setSaving(true);
+    const slug = newModuleSlug || generateSlug(newModuleTitle);
+    
     try {
-      const { error } = await supabase.from('docs_modules').insert({
-        title: newModuleTitle,
-        slug: newModuleSlug || generateSlug(newModuleTitle),
-        description: newModuleDescription || null,
-        sort_order: modules.length,
-        is_published: newModulePublished,
-      });
+      const { data, error } = await supabase
+        .from('docs_modules')
+        .insert({
+          title: newModuleTitle,
+          slug,
+          description: newModuleDescription || null,
+          sort_order: modules.length,
+          is_published: newModulePublished,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
+      // Optimistic update with real ID
+      addModuleOptimistic({ ...data, submodules: [] });
       toast.success('تم إضافة الوحدة بنجاح');
       setModuleDialogOpen(false);
       resetModuleForm();
-      fetchModules();
     } catch (error: any) {
       console.error('Error adding module:', error);
       if (error.code === '23505') {
@@ -558,15 +459,20 @@ export default function ContentTreePage() {
     }
 
     setSaving(true);
+    const updates = {
+      title: newModuleTitle,
+      slug: newModuleSlug || generateSlug(newModuleTitle),
+      description: newModuleDescription || null,
+      is_published: newModulePublished,
+    };
+
+    // Optimistic update
+    updateModuleOptimistic(selectedModule.id, updates);
+    
     try {
       const { error } = await supabase
         .from('docs_modules')
-        .update({
-          title: newModuleTitle,
-          slug: newModuleSlug || generateSlug(newModuleTitle),
-          description: newModuleDescription || null,
-          is_published: newModulePublished,
-        })
+        .update(updates)
         .eq('id', selectedModule.id);
 
       if (error) throw error;
@@ -574,7 +480,6 @@ export default function ContentTreePage() {
       toast.success('تم تحديث الوحدة بنجاح');
       setEditModuleDialogOpen(false);
       resetModuleForm();
-      fetchModules();
     } catch (error: any) {
       console.error('Error updating module:', error);
       if (error.code === '23505') {
@@ -591,6 +496,10 @@ export default function ContentTreePage() {
     if (!selectedModule) return;
 
     setSaving(true);
+    
+    // Optimistic update
+    deleteModuleOptimistic(selectedModule.id);
+    
     try {
       const { error } = await supabase
         .from('docs_modules')
@@ -602,7 +511,6 @@ export default function ContentTreePage() {
       toast.success('تم حذف الوحدة بنجاح');
       setDeleteModuleDialogOpen(false);
       setSelectedModule(null);
-      fetchModules();
     } catch (error: any) {
       console.error('Error deleting module:', error);
       toast.error('حدث خطأ أثناء حذف الوحدة. تأكد من حذف جميع الأقسام أولاً');
@@ -619,22 +527,30 @@ export default function ContentTreePage() {
     }
 
     setSaving(true);
+    const slug = newSubmoduleSlug || generateSlug(newSubmoduleTitle);
+    const module = modules.find((m) => m.id === selectedModuleId);
+    
     try {
-      const { error } = await supabase.from('docs_submodules').insert({
-        module_id: selectedModuleId,
-        title: newSubmoduleTitle,
-        slug: newSubmoduleSlug || generateSlug(newSubmoduleTitle),
-        description: newSubmoduleDescription || null,
-        is_published: newSubmodulePublished,
-        sort_order: 0,
-      });
+      const { data, error } = await supabase
+        .from('docs_submodules')
+        .insert({
+          module_id: selectedModuleId,
+          title: newSubmoduleTitle,
+          slug,
+          description: newSubmoduleDescription || null,
+          is_published: newSubmodulePublished,
+          sort_order: module?.submodules.length || 0,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
+      // Optimistic update
+      addSubmoduleOptimistic(selectedModuleId, { ...data, articles: [] });
       toast.success('تم إضافة القسم بنجاح');
       setSubmoduleDialogOpen(false);
       resetSubmoduleForm();
-      fetchModules();
     } catch (error: any) {
       console.error('Error adding submodule:', error);
       if (error.code === '23505') {
@@ -654,15 +570,20 @@ export default function ContentTreePage() {
     }
 
     setSaving(true);
+    const updates = {
+      title: newSubmoduleTitle,
+      slug: newSubmoduleSlug || generateSlug(newSubmoduleTitle),
+      description: newSubmoduleDescription || null,
+      is_published: newSubmodulePublished,
+    };
+
+    // Optimistic update
+    updateSubmoduleOptimistic(selectedSubmodule.id, updates);
+    
     try {
       const { error } = await supabase
         .from('docs_submodules')
-        .update({
-          title: newSubmoduleTitle,
-          slug: newSubmoduleSlug || generateSlug(newSubmoduleTitle),
-          description: newSubmoduleDescription || null,
-          is_published: newSubmodulePublished,
-        })
+        .update(updates)
         .eq('id', selectedSubmodule.id);
 
       if (error) throw error;
@@ -670,7 +591,6 @@ export default function ContentTreePage() {
       toast.success('تم تحديث القسم بنجاح');
       setEditSubmoduleDialogOpen(false);
       resetSubmoduleForm();
-      fetchModules();
     } catch (error: any) {
       console.error('Error updating submodule:', error);
       if (error.code === '23505') {
@@ -687,6 +607,10 @@ export default function ContentTreePage() {
     if (!selectedSubmodule) return;
 
     setSaving(true);
+    
+    // Optimistic update
+    deleteSubmoduleOptimistic(selectedSubmodule.id);
+    
     try {
       const { error } = await supabase
         .from('docs_submodules')
@@ -698,7 +622,6 @@ export default function ContentTreePage() {
       toast.success('تم حذف القسم بنجاح');
       setDeleteSubmoduleDialogOpen(false);
       setSelectedSubmodule(null);
-      fetchModules();
     } catch (error: any) {
       console.error('Error deleting submodule:', error);
       toast.error('حدث خطأ أثناء حذف القسم. تأكد من حذف جميع المقالات أولاً');
@@ -798,19 +721,18 @@ export default function ContentTreePage() {
                   value={newModuleDescription}
                   onChange={(e) => setNewModuleDescription(e.target.value)}
                   placeholder="وصف مختصر للوحدة"
-                  rows={2}
                 />
               </div>
-              <div className="flex items-center justify-between">
-                <Label>منشور</Label>
+              <div className="flex items-center gap-2">
                 <Switch
                   checked={newModulePublished}
                   onCheckedChange={setNewModulePublished}
                 />
+                <Label>منشور</Label>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => { setModuleDialogOpen(false); resetModuleForm(); }}>
+              <Button variant="outline" onClick={() => setModuleDialogOpen(false)}>
                 إلغاء
               </Button>
               <Button onClick={handleAddModule} disabled={saving}>
@@ -825,23 +747,20 @@ export default function ContentTreePage() {
       {/* Content Tree */}
       <Card>
         <CardHeader>
-          <CardTitle>الوحدات والأقسام</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <FolderOpen className="h-5 w-5" />
+            هيكل المحتوى
+          </CardTitle>
           <CardDescription>
-            {modules.length} وحدة رئيسية - اسحب وأفلت لإعادة الترتيب
+            {modules.length} وحدة رئيسية
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {modules.length === 0 ? (
-            <div className="text-center py-12">
-              <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">لا توجد وحدات بعد</p>
-              <Button
-                className="mt-4 gap-2"
-                onClick={() => setModuleDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                إضافة أول وحدة
-              </Button>
+            <div className="text-center py-8 text-muted-foreground">
+              <FolderOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>لا توجد وحدات بعد</p>
+              <p className="text-sm">ابدأ بإضافة وحدة رئيسية</p>
             </div>
           ) : (
             <DndContext
@@ -853,26 +772,32 @@ export default function ContentTreePage() {
                 items={modules.map((m) => m.id)}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="space-y-2">
-                  {modules.map((module) => (
-                    <SortableModuleItem
-                      key={module.id}
-                      module={module}
-                      openModules={openModules}
-                      toggleModule={toggleModule}
-                      openEditModuleDialog={openEditModuleDialog}
-                      setSelectedModule={setSelectedModule}
-                      setDeleteModuleDialogOpen={setDeleteModuleDialogOpen}
-                      setSelectedModuleId={setSelectedModuleId}
-                      setSubmoduleDialogOpen={setSubmoduleDialogOpen}
-                      openEditSubmoduleDialog={openEditSubmoduleDialog}
-                      setSelectedSubmodule={setSelectedSubmodule}
-                      setDeleteSubmoduleDialogOpen={setDeleteSubmoduleDialogOpen}
-                      isAdmin={isAdmin}
-                      onSubmodulesReorder={handleSubmodulesReorder}
-                    />
-                  ))}
-                </div>
+                {modules.map((module) => (
+                  <SortableModuleItem
+                    key={module.id}
+                    module={module}
+                    isOpen={openModules.includes(module.id)}
+                    onToggle={() => toggleModule(module.id)}
+                    onEdit={() => openEditModuleDialog(module)}
+                    onDelete={() => {
+                      setSelectedModule(module);
+                      setDeleteModuleDialogOpen(true);
+                    }}
+                    onAddSubmodule={() => {
+                      setSelectedModuleId(module.id);
+                      setSubmoduleDialogOpen(true);
+                    }}
+                    onEditSubmodule={openEditSubmoduleDialog}
+                    onDeleteSubmodule={(sub) => {
+                      setSelectedSubmodule(sub);
+                      setDeleteSubmoduleDialogOpen(true);
+                    }}
+                    onSubmodulesReorder={(newSubs) =>
+                      handleSubmodulesReorder(module.id, newSubs)
+                    }
+                    isAdmin={isAdmin}
+                  />
+                ))}
               </SortableContext>
             </DndContext>
           )}
@@ -880,13 +805,11 @@ export default function ContentTreePage() {
       </Card>
 
       {/* Edit Module Dialog */}
-      <Dialog open={editModuleDialogOpen} onOpenChange={(open) => { setEditModuleDialogOpen(open); if (!open) resetModuleForm(); }}>
+      <Dialog open={editModuleDialogOpen} onOpenChange={setEditModuleDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>تعديل الوحدة</DialogTitle>
-            <DialogDescription>
-              تعديل بيانات الوحدة الرئيسية
-            </DialogDescription>
+            <DialogDescription>تعديل بيانات الوحدة</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -894,7 +817,6 @@ export default function ContentTreePage() {
               <Input
                 value={newModuleTitle}
                 onChange={(e) => setNewModuleTitle(e.target.value)}
-                placeholder="مثال: إدارة المحتوى"
               />
             </div>
             <div className="space-y-2">
@@ -902,34 +824,37 @@ export default function ContentTreePage() {
               <Input
                 value={newModuleSlug}
                 onChange={(e) => setNewModuleSlug(e.target.value)}
-                placeholder="مثال: content-management"
                 dir="ltr"
               />
             </div>
             <div className="space-y-2">
-              <Label>الوصف (اختياري)</Label>
+              <Label>الوصف</Label>
               <Textarea
                 value={newModuleDescription}
                 onChange={(e) => setNewModuleDescription(e.target.value)}
-                placeholder="وصف مختصر للوحدة"
-                rows={2}
               />
             </div>
-            <div className="flex items-center justify-between">
-              <Label>منشور</Label>
+            <div className="flex items-center gap-2">
               <Switch
                 checked={newModulePublished}
                 onCheckedChange={setNewModulePublished}
               />
+              <Label>منشور</Label>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditModuleDialogOpen(false); resetModuleForm(); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditModuleDialogOpen(false);
+                resetModuleForm();
+              }}
+            >
               إلغاء
             </Button>
             <Button onClick={handleEditModule} disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
-              حفظ التغييرات
+              حفظ
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -941,7 +866,8 @@ export default function ContentTreePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>حذف الوحدة</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من حذف وحدة "{selectedModule?.title}"؟ سيتم حذف جميع الأقسام الفرعية والمقالات المرتبطة بها.
+              هل أنت متأكد من حذف "{selectedModule?.title}"؟ سيتم حذف جميع الأقسام
+              والمقالات المرتبطة بها.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -958,13 +884,11 @@ export default function ContentTreePage() {
       </AlertDialog>
 
       {/* Add Submodule Dialog */}
-      <Dialog open={submoduleDialogOpen} onOpenChange={(open) => { setSubmoduleDialogOpen(open); if (!open) resetSubmoduleForm(); }}>
+      <Dialog open={submoduleDialogOpen} onOpenChange={setSubmoduleDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>إضافة قسم فرعي</DialogTitle>
-            <DialogDescription>
-              أضف قسماً فرعياً جديداً للوحدة
-            </DialogDescription>
+            <DialogDescription>أضف قسم فرعي جديد للوحدة</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -972,7 +896,7 @@ export default function ContentTreePage() {
               <Input
                 value={newSubmoduleTitle}
                 onChange={(e) => setNewSubmoduleTitle(e.target.value)}
-                placeholder="مثال: إدارة المقالات"
+                placeholder="مثال: إنشاء محتوى جديد"
               />
             </div>
             <div className="space-y-2">
@@ -980,7 +904,7 @@ export default function ContentTreePage() {
               <Input
                 value={newSubmoduleSlug}
                 onChange={(e) => setNewSubmoduleSlug(e.target.value)}
-                placeholder="مثال: articles"
+                placeholder="مثال: create-content"
                 dir="ltr"
               />
             </div>
@@ -989,20 +913,24 @@ export default function ContentTreePage() {
               <Textarea
                 value={newSubmoduleDescription}
                 onChange={(e) => setNewSubmoduleDescription(e.target.value)}
-                placeholder="وصف مختصر للقسم"
-                rows={2}
               />
             </div>
-            <div className="flex items-center justify-between">
-              <Label>منشور</Label>
+            <div className="flex items-center gap-2">
               <Switch
                 checked={newSubmodulePublished}
                 onCheckedChange={setNewSubmodulePublished}
               />
+              <Label>منشور</Label>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setSubmoduleDialogOpen(false); resetSubmoduleForm(); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSubmoduleDialogOpen(false);
+                resetSubmoduleForm();
+              }}
+            >
               إلغاء
             </Button>
             <Button onClick={handleAddSubmodule} disabled={saving}>
@@ -1014,13 +942,11 @@ export default function ContentTreePage() {
       </Dialog>
 
       {/* Edit Submodule Dialog */}
-      <Dialog open={editSubmoduleDialogOpen} onOpenChange={(open) => { setEditSubmoduleDialogOpen(open); if (!open) resetSubmoduleForm(); }}>
+      <Dialog open={editSubmoduleDialogOpen} onOpenChange={setEditSubmoduleDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>تعديل القسم</DialogTitle>
-            <DialogDescription>
-              تعديل بيانات القسم الفرعي
-            </DialogDescription>
+            <DialogDescription>تعديل بيانات القسم الفرعي</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -1028,7 +954,6 @@ export default function ContentTreePage() {
               <Input
                 value={newSubmoduleTitle}
                 onChange={(e) => setNewSubmoduleTitle(e.target.value)}
-                placeholder="مثال: إدارة المقالات"
               />
             </div>
             <div className="space-y-2">
@@ -1036,46 +961,53 @@ export default function ContentTreePage() {
               <Input
                 value={newSubmoduleSlug}
                 onChange={(e) => setNewSubmoduleSlug(e.target.value)}
-                placeholder="مثال: articles"
                 dir="ltr"
               />
             </div>
             <div className="space-y-2">
-              <Label>الوصف (اختياري)</Label>
+              <Label>الوصف</Label>
               <Textarea
                 value={newSubmoduleDescription}
                 onChange={(e) => setNewSubmoduleDescription(e.target.value)}
-                placeholder="وصف مختصر للقسم"
-                rows={2}
               />
             </div>
-            <div className="flex items-center justify-between">
-              <Label>منشور</Label>
+            <div className="flex items-center gap-2">
               <Switch
                 checked={newSubmodulePublished}
                 onCheckedChange={setNewSubmodulePublished}
               />
+              <Label>منشور</Label>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditSubmoduleDialogOpen(false); resetSubmoduleForm(); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditSubmoduleDialogOpen(false);
+                resetSubmoduleForm();
+              }}
+            >
               إلغاء
             </Button>
             <Button onClick={handleEditSubmodule} disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
-              حفظ التغييرات
+              حفظ
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete Submodule Dialog */}
-      <AlertDialog open={deleteSubmoduleDialogOpen} onOpenChange={setDeleteSubmoduleDialogOpen}>
+      <AlertDialog
+        open={deleteSubmoduleDialogOpen}
+        onOpenChange={setDeleteSubmoduleDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>حذف القسم</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من حذف قسم "{selectedSubmodule?.title}"؟ سيتم حذف جميع المقالات المرتبطة به.
+              هل أنت متأكد من حذف "{selectedSubmodule?.title}"؟ سيتم حذف جميع
+              المقالات المرتبطة به.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
