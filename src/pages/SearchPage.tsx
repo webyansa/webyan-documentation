@@ -81,7 +81,6 @@ export default function SearchPage() {
                   </Link>
                 ))}
               </div>
-              </div>
             ) : (
               <div className="text-center py-16 px-6 rounded-2xl bg-muted/50">
                 <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
