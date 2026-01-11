@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { ThumbsUp, ThumbsDown, Send, Check } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Send, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface FeedbackWidgetProps {
   articleId: string;
@@ -13,26 +15,41 @@ export function FeedbackWidget({ articleId, className }: FeedbackWidgetProps) {
   const [feedback, setFeedback] = useState<"helpful" | "not-helpful" | null>(null);
   const [showComment, setShowComment] = useState(false);
   const [comment, setComment] = useState("");
+  const [reason, setReason] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleFeedback = (value: "helpful" | "not-helpful") => {
     setFeedback(value);
     if (value === "not-helpful") {
       setShowComment(true);
     } else {
-      // Submit positive feedback
-      submitFeedback(value, "");
+      submitFeedback(true, "", "");
     }
   };
 
-  const submitFeedback = (type: "helpful" | "not-helpful", text: string) => {
-    // In a real app, this would send to the backend
-    console.log("Feedback submitted:", { articleId, type, comment: text });
-    setSubmitted(true);
+  const submitFeedback = async (isHelpful: boolean, reasonText: string, commentText: string) => {
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.from("docs_feedback").insert({
+        article_id: articleId,
+        is_helpful: isHelpful,
+        reason: reasonText || null,
+        comment: commentText || null,
+      });
+
+      if (error) throw error;
+      setSubmitted(true);
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+      toast.error("حدث خطأ أثناء إرسال التقييم");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSubmitComment = () => {
-    submitFeedback("not-helpful", comment);
+    submitFeedback(false, reason, comment);
   };
 
   if (submitted) {
@@ -71,15 +88,21 @@ export function FeedbackWidget({ articleId, className }: FeedbackWidgetProps) {
             variant="outline"
             size="lg"
             onClick={() => handleFeedback("helpful")}
+            disabled={submitting}
             className="flex-1 gap-2 hover:bg-success/10 hover:text-success hover:border-success"
           >
-            <ThumbsUp className="h-5 w-5" />
+            {submitting ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <ThumbsUp className="h-5 w-5" />
+            )}
             نعم، أفادني
           </Button>
           <Button
             variant="outline"
             size="lg"
             onClick={() => handleFeedback("not-helpful")}
+            disabled={submitting}
             className="flex-1 gap-2 hover:bg-destructive/10 hover:text-destructive hover:border-destructive"
           >
             <ThumbsDown className="h-5 w-5" />
@@ -98,13 +121,18 @@ export function FeedbackWidget({ articleId, className }: FeedbackWidgetProps) {
             className="min-h-[100px]"
           />
           <div className="flex gap-2">
-            <Button onClick={handleSubmitComment} className="gap-2">
-              <Send className="h-4 w-4" />
+            <Button onClick={handleSubmitComment} disabled={submitting} className="gap-2">
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
               إرسال
             </Button>
             <Button
               variant="ghost"
-              onClick={() => submitFeedback("not-helpful", "")}
+              onClick={() => submitFeedback(false, "", "")}
+              disabled={submitting}
             >
               تخطي
             </Button>

@@ -1,14 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ChevronDown, ChevronLeft } from "lucide-react";
+import { ChevronDown, ChevronLeft, Loader2 } from "lucide-react";
 import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
-import { docModules, type DocModule, type DocSubModule } from "@/data/docsData";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { supabase } from "@/integrations/supabase/client";
 
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
+}
+
+interface Module {
+  id: string;
+  slug: string;
+  title: string;
+  icon: string;
+  subModules: SubModule[];
+}
+
+interface SubModule {
+  id: string;
+  slug: string;
+  title: string;
+  icon: string;
+  articles: Article[];
+}
+
+interface Article {
+  id: string;
+  slug: string;
+  title: string;
 }
 
 function getIcon(iconName: string) {
@@ -16,7 +38,7 @@ function getIcon(iconName: string) {
   return IconComponent ? <IconComponent className="h-4 w-4" /> : null;
 }
 
-function ModuleItem({ module }: { module: DocModule }) {
+function ModuleItem({ module }: { module: Module }) {
   const location = useLocation();
   const [isExpanded, setIsExpanded] = useState(
     location.pathname.includes(`/${module.slug}`)
@@ -65,8 +87,8 @@ function SubModuleItem({
   module,
   subModule,
 }: {
-  module: DocModule;
-  subModule: DocSubModule;
+  module: Module;
+  subModule: SubModule;
 }) {
   const location = useLocation();
   const [isExpanded, setIsExpanded] = useState(
@@ -140,6 +162,72 @@ function SubModuleItem({
 }
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
+  const [modules, setModules] = useState<Module[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchModules();
+  }, []);
+
+  const fetchModules = async () => {
+    try {
+      // Fetch modules
+      const { data: modulesData, error: modulesError } = await supabase
+        .from('docs_modules')
+        .select('id, slug, title, icon')
+        .eq('is_published', true)
+        .order('sort_order');
+
+      if (modulesError) throw modulesError;
+
+      const modulesWithContent: Module[] = [];
+
+      for (const mod of modulesData || []) {
+        // Fetch submodules for this module
+        const { data: submodulesData } = await supabase
+          .from('docs_submodules')
+          .select('id, slug, title, icon')
+          .eq('module_id', mod.id)
+          .eq('is_published', true)
+          .order('sort_order');
+
+        const subModulesWithArticles: SubModule[] = [];
+
+        for (const sub of submodulesData || []) {
+          // Fetch articles for this submodule
+          const { data: articlesData } = await supabase
+            .from('docs_articles')
+            .select('id, slug, title')
+            .eq('submodule_id', sub.id)
+            .eq('status', 'published')
+            .order('sort_order');
+
+          subModulesWithArticles.push({
+            id: sub.id,
+            slug: sub.slug,
+            title: sub.title,
+            icon: sub.icon || 'FileText',
+            articles: articlesData || [],
+          });
+        }
+
+        modulesWithContent.push({
+          id: mod.id,
+          slug: mod.slug,
+          title: mod.title,
+          icon: mod.icon || 'BookOpen',
+          subModules: subModulesWithArticles,
+        });
+      }
+
+      setModules(modulesWithContent);
+    } catch (error) {
+      console.error('Error fetching sidebar data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -178,9 +266,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
 
             {/* Modules */}
-            {docModules.map((module) => (
-              <ModuleItem key={module.id} module={module} />
-            ))}
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : modules.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                لا توجد وحدات بعد
+              </p>
+            ) : (
+              modules.map((module) => (
+                <ModuleItem key={module.id} module={module} />
+              ))
+            )}
           </nav>
         </ScrollArea>
       </aside>
