@@ -32,9 +32,26 @@ import {
 } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Plus, ChevronDown, ChevronLeft, FolderOpen, FileText, Edit, Trash2, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Plus, ChevronDown, ChevronLeft, FolderOpen, FileText, Edit, Trash2, Loader2, Eye, EyeOff, GripVertical } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Article {
   id: string;
@@ -62,6 +79,283 @@ interface Module {
   sort_order: number;
   is_published: boolean;
   submodules: Submodule[];
+}
+
+// Sortable Module Item Component
+function SortableModuleItem({
+  module,
+  openModules,
+  toggleModule,
+  openEditModuleDialog,
+  setSelectedModule,
+  setDeleteModuleDialogOpen,
+  setSelectedModuleId,
+  setSubmoduleDialogOpen,
+  openEditSubmoduleDialog,
+  setSelectedSubmodule,
+  setDeleteSubmoduleDialogOpen,
+  isAdmin,
+  onSubmodulesReorder,
+}: {
+  module: Module;
+  openModules: string[];
+  toggleModule: (id: string) => void;
+  openEditModuleDialog: (module: Module) => void;
+  setSelectedModule: (module: Module | null) => void;
+  setDeleteModuleDialogOpen: (open: boolean) => void;
+  setSelectedModuleId: (id: string | null) => void;
+  setSubmoduleDialogOpen: (open: boolean) => void;
+  openEditSubmoduleDialog: (submodule: Submodule) => void;
+  setSelectedSubmodule: (submodule: Submodule | null) => void;
+  setDeleteSubmoduleDialogOpen: (open: boolean) => void;
+  isAdmin: boolean;
+  onSubmodulesReorder: (moduleId: string, submodules: Submodule[]) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: module.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleSubmoduleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = module.submodules.findIndex((s) => s.id === active.id);
+      const newIndex = module.submodules.findIndex((s) => s.id === over.id);
+      const newSubmodules = arrayMove(module.submodules, oldIndex, newIndex);
+      onSubmodulesReorder(module.id, newSubmodules);
+    }
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <Collapsible
+        open={openModules.includes(module.id)}
+        onOpenChange={() => toggleModule(module.id)}
+      >
+        <div className="border rounded-lg">
+          <CollapsibleTrigger className="flex items-center justify-between w-full p-4 hover:bg-muted/50 transition-colors">
+            <div className="flex items-center gap-3">
+              <button
+                {...attributes}
+                {...listeners}
+                className="cursor-grab hover:text-primary p-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground" />
+              </button>
+              {openModules.includes(module.id) ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+              )}
+              <FolderOpen className="h-5 w-5 text-primary" />
+              <span className="font-medium">{module.title}</span>
+              <Badge variant="secondary" className="text-xs">
+                {module.submodules.length} قسم
+              </Badge>
+              {!module.is_published && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <EyeOff className="h-3 w-3" />
+                  مخفي
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => openEditModuleDialog(module)}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  onClick={() => {
+                    setSelectedModule(module);
+                    setDeleteModuleDialogOpen(true);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedModuleId(module.id);
+                  setSubmoduleDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-4 py-2 space-y-1">
+              {module.submodules.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2 pr-8">
+                  لا توجد أقسام فرعية
+                </p>
+              ) : (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleSubmoduleDragEnd}
+                >
+                  <SortableContext
+                    items={module.submodules.map((s) => s.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {module.submodules.map((submodule) => (
+                      <SortableSubmoduleItem
+                        key={submodule.id}
+                        submodule={submodule}
+                        openEditSubmoduleDialog={openEditSubmoduleDialog}
+                        setSelectedSubmodule={setSelectedSubmodule}
+                        setDeleteSubmoduleDialogOpen={setDeleteSubmoduleDialogOpen}
+                        isAdmin={isAdmin}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              )}
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    </div>
+  );
+}
+
+// Sortable Submodule Item Component
+function SortableSubmoduleItem({
+  submodule,
+  openEditSubmoduleDialog,
+  setSelectedSubmodule,
+  setDeleteSubmoduleDialogOpen,
+  isAdmin,
+}: {
+  submodule: Submodule;
+  openEditSubmoduleDialog: (submodule: Submodule) => void;
+  setSelectedSubmodule: (submodule: Submodule | null) => void;
+  setDeleteSubmoduleDialogOpen: (open: boolean) => void;
+  isAdmin: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: submodule.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="space-y-1">
+      <div className="flex items-center justify-between py-2 pr-4 hover:bg-muted/30 rounded transition-colors">
+        <div className="flex items-center gap-3">
+          <button
+            {...attributes}
+            {...listeners}
+            className="cursor-grab hover:text-primary p-1"
+          >
+            <GripVertical className="h-3 w-3 text-muted-foreground" />
+          </button>
+          <FileText className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">{submodule.title}</span>
+          <Badge variant="outline" className="text-xs">
+            {submodule.articles.length} مقال
+          </Badge>
+          {!submodule.is_published && (
+            <Badge variant="outline" className="text-xs gap-1">
+              <EyeOff className="h-3 w-3" />
+              مخفي
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => openEditSubmoduleDialog(submodule)}
+          >
+            <Edit className="h-3 w-3" />
+          </Button>
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              onClick={() => {
+                setSelectedSubmodule(submodule);
+                setDeleteSubmoduleDialogOpen(true);
+              }}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      </div>
+      {/* Articles List */}
+      {submodule.articles.length > 0 && (
+        <div className="pr-12 space-y-1">
+          {submodule.articles.map((article) => (
+            <Link
+              key={article.id}
+              to={`/admin/articles/${article.id}`}
+              className="flex items-center justify-between py-1.5 px-3 rounded hover:bg-muted/50 transition-colors text-sm"
+            >
+              <span className="text-muted-foreground">{article.title}</span>
+              <Badge
+                variant={
+                  article.status === 'published'
+                    ? 'default'
+                    : article.status === 'draft'
+                    ? 'secondary'
+                    : 'outline'
+                }
+                className="text-xs"
+              >
+                {article.status === 'published'
+                  ? 'منشور'
+                  : article.status === 'draft'
+                  ? 'مسودة'
+                  : 'مؤرشف'}
+              </Badge>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function ContentTreePage() {
@@ -95,6 +389,13 @@ export default function ContentTreePage() {
   const [newSubmodulePublished, setNewSubmodulePublished] = useState(true);
   
   const [saving, setSaving] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     fetchModules();
@@ -163,6 +464,56 @@ export default function ContentTreePage() {
       .toLowerCase()
       .replace(/\s+/g, '-')
       .replace(/[^\w\u0621-\u064A-]/g, '');
+  };
+
+  // Handle module drag end
+  const handleModuleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = modules.findIndex((m) => m.id === active.id);
+      const newIndex = modules.findIndex((m) => m.id === over.id);
+      const newModules = arrayMove(modules, oldIndex, newIndex);
+      setModules(newModules);
+
+      // Update sort_order in database
+      try {
+        for (let i = 0; i < newModules.length; i++) {
+          await supabase
+            .from('docs_modules')
+            .update({ sort_order: i })
+            .eq('id', newModules[i].id);
+        }
+        toast.success('تم تحديث ترتيب الوحدات');
+      } catch (error) {
+        console.error('Error updating module order:', error);
+        toast.error('حدث خطأ أثناء تحديث الترتيب');
+        fetchModules();
+      }
+    }
+  };
+
+  // Handle submodules reorder
+  const handleSubmodulesReorder = async (moduleId: string, newSubmodules: Submodule[]) => {
+    setModules((prev) =>
+      prev.map((m) =>
+        m.id === moduleId ? { ...m, submodules: newSubmodules } : m
+      )
+    );
+
+    // Update sort_order in database
+    try {
+      for (let i = 0; i < newSubmodules.length; i++) {
+        await supabase
+          .from('docs_submodules')
+          .update({ sort_order: i })
+          .eq('id', newSubmodules[i].id);
+      }
+      toast.success('تم تحديث ترتيب الأقسام');
+    } catch (error) {
+      console.error('Error updating submodule order:', error);
+      toast.error('حدث خطأ أثناء تحديث الترتيب');
+      fetchModules();
+    }
   };
 
   // Module handlers
@@ -406,7 +757,7 @@ export default function ContentTreePage() {
         <div>
           <h1 className="text-2xl font-bold">شجرة المحتوى</h1>
           <p className="text-muted-foreground">
-            إدارة الوحدات والأقسام الفرعية والمقالات
+            إدارة الوحدات والأقسام الفرعية والمقالات - اسحب للترتيب
           </p>
         </div>
         <Dialog open={moduleDialogOpen} onOpenChange={setModuleDialogOpen}>
@@ -476,7 +827,7 @@ export default function ContentTreePage() {
         <CardHeader>
           <CardTitle>الوحدات والأقسام</CardTitle>
           <CardDescription>
-            {modules.length} وحدة رئيسية
+            {modules.length} وحدة رئيسية - اسحب وأفلت لإعادة الترتيب
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -493,153 +844,37 @@ export default function ContentTreePage() {
               </Button>
             </div>
           ) : (
-            <div className="space-y-2">
-              {modules.map((module) => (
-                <Collapsible
-                  key={module.id}
-                  open={openModules.includes(module.id)}
-                  onOpenChange={() => toggleModule(module.id)}
-                >
-                  <div className="border rounded-lg">
-                    <CollapsibleTrigger className="flex items-center justify-between w-full p-4 hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        {openModules.includes(module.id) ? (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <FolderOpen className="h-5 w-5 text-primary" />
-                        <span className="font-medium">{module.title}</span>
-                        <Badge variant="secondary" className="text-xs">
-                          {module.submodules.length} قسم
-                        </Badge>
-                        {!module.is_published && (
-                          <Badge variant="outline" className="text-xs gap-1">
-                            <EyeOff className="h-3 w-3" />
-                            مخفي
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openEditModuleDialog(module)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {isAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => {
-                              setSelectedModule(module);
-                              setDeleteModuleDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedModuleId(module.id);
-                            setSubmoduleDialogOpen(true);
-                          }}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <div className="border-t px-4 py-2 space-y-1">
-                        {module.submodules.length === 0 ? (
-                          <p className="text-sm text-muted-foreground py-2 pr-8">
-                            لا توجد أقسام فرعية
-                          </p>
-                        ) : (
-                          module.submodules.map((submodule) => (
-                            <div key={submodule.id} className="space-y-1">
-                              <div className="flex items-center justify-between py-2 pr-8 hover:bg-muted/30 rounded transition-colors">
-                                <div className="flex items-center gap-3">
-                                  <FileText className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-sm font-medium">{submodule.title}</span>
-                                  <Badge variant="outline" className="text-xs">
-                                    {submodule.articles.length} مقال
-                                  </Badge>
-                                  {!submodule.is_published && (
-                                    <Badge variant="outline" className="text-xs gap-1">
-                                      <EyeOff className="h-3 w-3" />
-                                      مخفي
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => openEditSubmoduleDialog(submodule)}
-                                  >
-                                    <Edit className="h-3 w-3" />
-                                  </Button>
-                                  {isAdmin && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-destructive hover:text-destructive"
-                                      onClick={() => {
-                                        setSelectedSubmodule(submodule);
-                                        setDeleteSubmoduleDialogOpen(true);
-                                      }}
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                              {/* Articles List */}
-                              {submodule.articles.length > 0 && (
-                                <div className="pr-12 space-y-1">
-                                  {submodule.articles.map((article) => (
-                                    <Link
-                                      key={article.id}
-                                      to={`/admin/articles/${article.id}`}
-                                      className="flex items-center justify-between py-1.5 px-3 rounded hover:bg-muted/50 transition-colors text-sm"
-                                    >
-                                      <span className="text-muted-foreground">{article.title}</span>
-                                      <Badge
-                                        variant={
-                                          article.status === 'published'
-                                            ? 'default'
-                                            : article.status === 'draft'
-                                            ? 'secondary'
-                                            : 'outline'
-                                        }
-                                        className="text-xs"
-                                      >
-                                        {article.status === 'published'
-                                          ? 'منشور'
-                                          : article.status === 'draft'
-                                          ? 'مسودة'
-                                          : 'مؤرشف'}
-                                      </Badge>
-                                    </Link>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-              ))}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleModuleDragEnd}
+            >
+              <SortableContext
+                items={modules.map((m) => m.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2">
+                  {modules.map((module) => (
+                    <SortableModuleItem
+                      key={module.id}
+                      module={module}
+                      openModules={openModules}
+                      toggleModule={toggleModule}
+                      openEditModuleDialog={openEditModuleDialog}
+                      setSelectedModule={setSelectedModule}
+                      setDeleteModuleDialogOpen={setDeleteModuleDialogOpen}
+                      setSelectedModuleId={setSelectedModuleId}
+                      setSubmoduleDialogOpen={setSubmoduleDialogOpen}
+                      openEditSubmoduleDialog={openEditSubmoduleDialog}
+                      setSelectedSubmodule={setSelectedSubmodule}
+                      setDeleteSubmoduleDialogOpen={setDeleteSubmoduleDialogOpen}
+                      isAdmin={isAdmin}
+                      onSubmodulesReorder={handleSubmodulesReorder}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </CardContent>
       </Card>

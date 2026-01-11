@@ -8,6 +8,7 @@ import Underline from '@tiptap/extension-underline';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import {
   Bold,
@@ -38,9 +40,24 @@ import {
   Heading2,
   Heading3,
   Minus,
+  Upload,
+  Loader2,
+  Check,
+  FolderOpen,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+interface MediaItem {
+  id: string;
+  url: string;
+  filename: string;
+  original_name: string;
+  mime_type: string;
+  created_at: string;
+}
 
 interface RichTextEditorProps {
   content: string;
@@ -55,6 +72,13 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [youtubeDialogOpen, setYoutubeDialogOpen] = useState(false);
+  
+  // Media library states
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [loadingMedia, setLoadingMedia] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
+  const [imageTab, setImageTab] = useState<'upload' | 'library' | 'url'>('upload');
 
   const editor = useEditor({
     extensions: [
@@ -102,6 +126,107 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
       editor.commands.setContent(content || '');
     }
   }, [content, editor]);
+
+  const fetchMediaLibrary = useCallback(async () => {
+    setLoadingMedia(true);
+    try {
+      const { data, error } = await supabase
+        .from('docs_media')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      setMediaItems(data || []);
+    } catch (error) {
+      console.error('Error fetching media:', error);
+    } finally {
+      setLoadingMedia(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (imageDialogOpen && imageTab === 'library') {
+      fetchMediaLibrary();
+    }
+  }, [imageDialogOpen, imageTab, fetchMediaLibrary]);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('يرجى اختيار ملف صورة فقط');
+      return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('حجم الملف يجب أن يكون أقل من 10 ميجابايت');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `articles/${fileName}`;
+
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('docs-media')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('docs-media')
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
+
+      // Save to database
+      const { data: mediaData, error: dbError } = await supabase
+        .from('docs_media')
+        .insert({
+          filename: fileName,
+          original_name: file.name,
+          url: publicUrl,
+          mime_type: file.type,
+          size_bytes: file.size,
+        })
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+
+      // Insert image into editor
+      if (editor) {
+        editor.chain().focus().setImage({ src: publicUrl }).run();
+      }
+
+      toast.success('تم رفع الصورة بنجاح');
+      setImageDialogOpen(false);
+      
+      // Reset file input
+      event.target.value = '';
+    } catch (error: any) {
+      console.error('Error uploading file:', error);
+      toast.error('حدث خطأ أثناء رفع الصورة');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSelectFromLibrary = () => {
+    if (selectedMedia && editor) {
+      editor.chain().focus().setImage({ src: selectedMedia.url }).run();
+      setImageDialogOpen(false);
+      setSelectedMedia(null);
+    }
+  };
 
   if (!editor) {
     return null;
@@ -331,7 +456,7 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
           </DialogContent>
         </Dialog>
 
-        {/* Image */}
+        {/* Image with Upload and Library */}
         <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
           <DialogTrigger asChild>
             <Button
@@ -344,27 +469,130 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
               <ImageIcon className="h-4 w-4" />
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>إضافة صورة</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>رابط الصورة</Label>
-                <Input
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  placeholder="https://example.com/image.jpg"
-                  dir="ltr"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setImageDialogOpen(false)}>
-                إلغاء
-              </Button>
-              <Button onClick={addImage}>إضافة</Button>
-            </DialogFooter>
+            <Tabs value={imageTab} onValueChange={(v) => setImageTab(v as 'upload' | 'library' | 'url')}>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="upload" className="gap-2">
+                  <Upload className="h-4 w-4" />
+                  رفع صورة
+                </TabsTrigger>
+                <TabsTrigger value="library" className="gap-2">
+                  <FolderOpen className="h-4 w-4" />
+                  مكتبة الوسائط
+                </TabsTrigger>
+                <TabsTrigger value="url" className="gap-2">
+                  <LinkIcon className="h-4 w-4" />
+                  رابط خارجي
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="upload" className="space-y-4 py-4">
+                <div className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-8 hover:border-primary/50 transition-colors">
+                  <Upload className="h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-sm text-muted-foreground mb-4">
+                    اسحب الصورة هنا أو اضغط للاختيار
+                  </p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                    className="hidden"
+                    id="image-upload"
+                  />
+                  <Button asChild disabled={uploading}>
+                    <label htmlFor="image-upload" className="cursor-pointer">
+                      {uploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                          جاري الرفع...
+                        </>
+                      ) : (
+                        'اختر صورة'
+                      )}
+                    </label>
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    الحد الأقصى: 10 ميجابايت | الصيغ: JPG, PNG, GIF, WebP
+                  </p>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="library" className="space-y-4 py-4">
+                {loadingMedia ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : mediaItems.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <FolderOpen className="h-12 w-12 mx-auto mb-4" />
+                    <p>لا توجد صور في المكتبة</p>
+                  </div>
+                ) : (
+                  <>
+                    <ScrollArea className="h-[300px]">
+                      <div className="grid grid-cols-4 gap-2 p-1">
+                        {mediaItems.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setSelectedMedia(item)}
+                            className={cn(
+                              'relative aspect-square rounded-lg overflow-hidden border-2 transition-all',
+                              selectedMedia?.id === item.id
+                                ? 'border-primary ring-2 ring-primary/20'
+                                : 'border-transparent hover:border-muted-foreground/30'
+                            )}
+                          >
+                            <img
+                              src={item.url}
+                              alt={item.original_name}
+                              className="w-full h-full object-cover"
+                            />
+                            {selectedMedia?.id === item.id && (
+                              <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                                <Check className="h-6 w-6 text-primary" />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setImageDialogOpen(false)}>
+                        إلغاء
+                      </Button>
+                      <Button onClick={handleSelectFromLibrary} disabled={!selectedMedia}>
+                        إضافة الصورة المختارة
+                      </Button>
+                    </DialogFooter>
+                  </>
+                )}
+              </TabsContent>
+
+              <TabsContent value="url" className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>رابط الصورة</Label>
+                  <Input
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="https://example.com/image.jpg"
+                    dir="ltr"
+                  />
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setImageDialogOpen(false)}>
+                    إلغاء
+                  </Button>
+                  <Button onClick={addImage} disabled={!imageUrl}>
+                    إضافة
+                  </Button>
+                </DialogFooter>
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
 

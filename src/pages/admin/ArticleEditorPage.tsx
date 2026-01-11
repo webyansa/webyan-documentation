@@ -424,15 +424,13 @@ export default function ArticleEditorPage() {
           <Card>
             <CardHeader>
               <CardTitle>المحتوى</CardTitle>
-              <CardDescription>محتوى المقال بتنسيق Markdown</CardDescription>
+              <CardDescription>محتوى المقال - استخدم شريط الأدوات للتنسيق</CardDescription>
             </CardHeader>
             <CardContent>
-              <Textarea
-                value={formData.content}
-                onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+              <RichTextEditor
+                content={formData.content}
+                onChange={(content) => setFormData(prev => ({ ...prev, content }))}
                 placeholder="اكتب محتوى المقال هنا..."
-                rows={20}
-                className="font-mono text-sm"
               />
             </CardContent>
           </Card>
@@ -705,7 +703,7 @@ export default function ArticleEditorPage() {
               <p>• أضف وصفاً يوضح محتوى المقال</p>
               <p>• حدد المتطلبات المسبقة للقارئ</p>
               <p>• اختر مستوى الصعوبة المناسب</p>
-              <p>• يمكنك استخدام Markdown للتنسيق</p>
+              <p>• استخدم المحرر الغني للتنسيق</p>
             </CardContent>
           </Card>
         </div>
