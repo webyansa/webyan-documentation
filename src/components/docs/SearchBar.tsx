@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, X, FileText, ArrowLeft } from "lucide-react";
+import { Search, X, FileText, ArrowLeft, Folder, FolderOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { searchArticles, docModules, type DocArticle } from "@/data/docsData";
 import { cn } from "@/lib/utils";
+import { useSearch } from "@/hooks/useSearch";
 
 interface SearchBarProps {
   variant?: "hero" | "compact";
@@ -13,22 +13,19 @@ interface SearchBarProps {
 
 export function SearchBar({ variant = "compact", className }: SearchBarProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<DocArticle[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { results, loading } = useSearch(query);
 
   useEffect(() => {
     if (query.trim().length >= 2) {
-      const found = searchArticles(query);
-      setResults(found.slice(0, 5));
       setIsOpen(true);
     } else {
-      setResults([]);
       setIsOpen(false);
     }
-  }, [query]);
+  }, [query, results]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -49,19 +46,21 @@ export function SearchBar({ variant = "compact", className }: SearchBarProps) {
     }
   };
 
-  const findArticlePath = (article: DocArticle) => {
-    for (const mod of docModules) {
-      for (const sub of mod.subModules) {
-        if (sub.articles.find((a) => a.id === article.id)) {
-          return `/docs/${mod.slug}/${sub.slug}/${article.slug}`;
-        }
-      }
-    }
-    return "/";
+
+  const getResultPath = (result: typeof results[0]) => {
+    if (result.type === 'module') return `/docs/${result.slug}`;
+    if (result.type === 'submodule') return `/docs/${result.moduleSlug}/${result.slug}`;
+    return `/docs/${result.moduleSlug}/${result.subModuleSlug}/${result.slug}`;
   };
 
-  const handleResultClick = (article: DocArticle) => {
-    navigate(findArticlePath(article));
+  const getResultIcon = (type: string) => {
+    if (type === 'module') return <FolderOpen className="h-5 w-5 text-primary" />;
+    if (type === 'submodule') return <Folder className="h-5 w-5 text-secondary" />;
+    return <FileText className="h-5 w-5 text-muted-foreground" />;
+  };
+
+  const handleResultClick = (result: typeof results[0]) => {
+    navigate(getResultPath(result));
     setQuery("");
     setIsOpen(false);
   };
@@ -111,48 +110,50 @@ export function SearchBar({ variant = "compact", className }: SearchBarProps) {
       </form>
 
       {/* Results Dropdown */}
-      {isOpen && results.length > 0 && (
-        <div className="absolute top-full mt-2 w-full bg-card border rounded-xl shadow-xl overflow-hidden z-50 animate-fade-in">
-          <ul>
-            {results.map((article) => (
-              <li key={article.id}>
+      {isOpen && (
+        <div className="absolute top-full mt-2 w-full bg-card border rounded-xl shadow-xl overflow-hidden z-50 animate-fade-in max-h-[400px] overflow-y-auto">
+          {loading ? (
+            <div className="p-4 text-center text-muted-foreground">جاري البحث...</div>
+          ) : results.length > 0 ? (
+            <>
+              <ul>
+                {results.slice(0, 5).map((result) => (
+                  <li key={result.id}>
+                    <button
+                      onClick={() => handleResultClick(result)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-right hover:bg-muted transition-colors"
+                    >
+                      {getResultIcon(result.type)}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground truncate">
+                          {result.title}
+                        </p>
+                        {result.description && (
+                          <p className="text-sm text-muted-foreground truncate">
+                            {result.description}
+                          </p>
+                        )}
+                      </div>
+                      <ArrowLeft className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div className="px-4 py-3 bg-muted/50 border-t">
                 <button
-                  onClick={() => handleResultClick(article)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-right hover:bg-muted transition-colors"
+                  onClick={handleSubmit}
+                  className="text-sm text-secondary hover:text-secondary/80 font-medium"
                 >
-                  <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">
-                      {article.title}
-                    </p>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {article.description}
-                    </p>
-                  </div>
-                  <ArrowLeft className="h-4 w-4 text-muted-foreground shrink-0" />
+                  عرض جميع النتائج ({results.length})
                 </button>
-              </li>
-            ))}
-          </ul>
-          <div className="px-4 py-3 bg-muted/50 border-t">
-            <button
-              onClick={handleSubmit}
-              className="text-sm text-secondary hover:text-secondary/80 font-medium"
-            >
-              عرض جميع نتائج البحث عن "{query}"
-            </button>
-          </div>
-        </div>
-      )}
-
-      {isOpen && query.trim().length >= 2 && results.length === 0 && (
-        <div className="absolute top-full mt-2 w-full bg-card border rounded-xl shadow-xl p-6 text-center z-50 animate-fade-in">
-          <p className="text-muted-foreground">
-            لم نجد نتائج لـ "{query}"
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            جرب كلمات بحث مختلفة
-          </p>
+              </div>
+            </>
+          ) : query.trim().length >= 2 ? (
+            <div className="p-6 text-center">
+              <p className="text-muted-foreground">لم نجد نتائج لـ "{query}"</p>
+              <p className="text-sm text-muted-foreground mt-1">جرب كلمات بحث مختلفة</p>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
