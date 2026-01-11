@@ -20,6 +20,7 @@ import NotFound from "./pages/NotFound";
 import AdminLayout from "./pages/admin/AdminLayout";
 import DashboardPage from "./pages/admin/DashboardPage";
 import ArticlesPage from "./pages/admin/ArticlesPage";
+import ArticleEditorPage from "./pages/admin/ArticleEditorPage";
 import ContentTreePage from "./pages/admin/ContentTreePage";
 import MediaPage from "./pages/admin/MediaPage";
 import TagsPage from "./pages/admin/TagsPage";
@@ -30,7 +31,6 @@ import SearchLogsPage from "./pages/admin/SearchLogsPage";
 import ReportsPage from "./pages/admin/ReportsPage";
 import UsersPage from "./pages/admin/UsersPage";
 import SettingsPage from "./pages/admin/SettingsPage";
-
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -56,6 +56,8 @@ const App = () => (
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path="articles" element={<ArticlesPage />} />
+              <Route path="articles/new" element={<ArticleEditorPage />} />
+              <Route path="articles/:id" element={<ArticleEditorPage />} />
               <Route path="content-tree" element={<ContentTreePage />} />
               <Route path="media" element={<MediaPage />} />
               <Route path="tags" element={<TagsPage />} />

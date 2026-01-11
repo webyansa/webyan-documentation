@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -25,10 +27,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, MoreHorizontal, Eye, Edit, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Eye, Edit, Trash2, Loader2, Archive, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 interface Article {
   id: string;
@@ -41,17 +54,23 @@ interface Article {
   updated_at: string;
   submodule: {
     title: string;
+    slug: string;
     module: {
       title: string;
+      slug: string;
     };
   } | null;
 }
 
 export default function ArticlesPage() {
+  const { isAdmin } = useAuth();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchArticles();
@@ -73,7 +92,8 @@ export default function ArticlesPage() {
           updated_at,
           submodule:docs_submodules(
             title,
-            module:docs_modules(title)
+            slug,
+            module:docs_modules(title, slug)
           )
         `)
         .order('updated_at', { ascending: false });
@@ -88,8 +108,60 @@ export default function ArticlesPage() {
       setArticles((data as unknown as Article[]) || []);
     } catch (error) {
       console.error('Error fetching articles:', error);
+      toast.error('حدث خطأ أثناء تحميل المقالات');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!articleToDelete) return;
+    
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('docs_articles')
+        .delete()
+        .eq('id', articleToDelete.id);
+
+      if (error) throw error;
+
+      toast.success('تم حذف المقال بنجاح');
+      setArticles(prev => prev.filter(a => a.id !== articleToDelete.id));
+    } catch (error) {
+      console.error('Error deleting article:', error);
+      toast.error('حدث خطأ أثناء حذف المقال');
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+      setArticleToDelete(null);
+    }
+  };
+
+  const handleStatusChange = async (articleId: string, newStatus: 'draft' | 'published' | 'archived') => {
+    try {
+      const { error } = await supabase
+        .from('docs_articles')
+        .update({ 
+          status: newStatus,
+          published_at: newStatus === 'published' ? new Date().toISOString() : null
+        })
+        .eq('id', articleId);
+
+      if (error) throw error;
+
+      toast.success(
+        newStatus === 'published' ? 'تم نشر المقال' :
+        newStatus === 'archived' ? 'تم أرشفة المقال' :
+        'تم إرجاع المقال للمسودة'
+      );
+      
+      setArticles(prev => prev.map(a => 
+        a.id === articleId ? { ...a, status: newStatus } : a
+      ));
+    } catch (error) {
+      console.error('Error updating article status:', error);
+      toast.error('حدث خطأ أثناء تحديث حالة المقال');
     }
   };
 
@@ -100,7 +172,7 @@ export default function ArticlesPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'published':
-        return <Badge className="bg-green-100 text-green-700">منشور</Badge>;
+        return <Badge className="bg-green-100 text-green-700 hover:bg-green-100">منشور</Badge>;
       case 'draft':
         return <Badge variant="secondary">مسودة</Badge>;
       case 'archived':
@@ -123,6 +195,11 @@ export default function ArticlesPage() {
     }
   };
 
+  const getArticlePreviewUrl = (article: Article) => {
+    if (!article.submodule) return '#';
+    return `/docs/${article.submodule.module?.slug}/${article.submodule.slug}/${article.slug}`;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -130,15 +207,20 @@ export default function ArticlesPage() {
         <div>
           <h1 className="text-2xl font-bold">المقالات</h1>
           <p className="text-muted-foreground">
-            إدارة مقالات الدليل
+            إدارة مقالات الدليل ({articles.length} مقال)
           </p>
         </div>
-        <Link to="/admin/articles/new">
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            مقال جديد
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={fetchArticles} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-        </Link>
+          <Link to="/admin/articles/new">
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              مقال جديد
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -205,7 +287,14 @@ export default function ArticlesPage() {
               <TableBody>
                 {filteredArticles.map((article) => (
                   <TableRow key={article.id}>
-                    <TableCell className="font-medium">{article.title}</TableCell>
+                    <TableCell>
+                      <Link 
+                        to={`/admin/articles/${article.id}`}
+                        className="font-medium hover:text-primary transition-colors"
+                      >
+                        {article.title}
+                      </Link>
+                    </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {article.submodule?.module?.title} / {article.submodule?.title}
                     </TableCell>
@@ -214,7 +303,7 @@ export default function ArticlesPage() {
                     <TableCell>
                       <span className="flex items-center gap-1 text-muted-foreground">
                         <Eye className="h-3 w-3" />
-                        {article.views_count}
+                        {article.views_count || 0}
                       </span>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
@@ -235,15 +324,52 @@ export default function ArticlesPage() {
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
-                            <Link to={`/article/${article.slug}`} className="flex items-center gap-2">
+                            <Link to={getArticlePreviewUrl(article)} target="_blank" className="flex items-center gap-2">
                               <Eye className="h-4 w-4" />
                               معاينة
                             </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
-                            <Trash2 className="h-4 w-4 ml-2" />
-                            حذف
-                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {article.status !== 'published' && (
+                            <DropdownMenuItem 
+                              onClick={() => handleStatusChange(article.id, 'published')}
+                              className="text-green-600"
+                            >
+                              <Eye className="h-4 w-4 ml-2" />
+                              نشر
+                            </DropdownMenuItem>
+                          )}
+                          {article.status === 'published' && (
+                            <DropdownMenuItem 
+                              onClick={() => handleStatusChange(article.id, 'draft')}
+                            >
+                              <RefreshCw className="h-4 w-4 ml-2" />
+                              إرجاع للمسودة
+                            </DropdownMenuItem>
+                          )}
+                          {article.status !== 'archived' && (
+                            <DropdownMenuItem 
+                              onClick={() => handleStatusChange(article.id, 'archived')}
+                            >
+                              <Archive className="h-4 w-4 ml-2" />
+                              أرشفة
+                            </DropdownMenuItem>
+                          )}
+                          {isAdmin && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                className="text-red-600"
+                                onClick={() => {
+                                  setArticleToDelete(article);
+                                  setDeleteDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 ml-2" />
+                                حذف
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -254,6 +380,29 @@ export default function ArticlesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>هل أنت متأكد من حذف هذا المقال؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم حذف المقال "{articleToDelete?.title}" نهائياً. لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleting && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
