@@ -4,6 +4,7 @@ import { Search, Menu, X, LogOut, Settings, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NotificationDropdown } from "@/components/layout/NotificationDropdown";
 import webyanLogo from "@/assets/webyan-logo.svg";
 
 interface HeaderProps {
@@ -70,6 +71,7 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
           
           {user ? (
             <>
+              <NotificationDropdown />
               {isAdminOrEditor && (
                 <Button variant="ghost" size="sm" asChild>
                   <Link to="/admin" className="flex items-center gap-1">
