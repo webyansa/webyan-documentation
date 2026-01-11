@@ -1,26 +1,26 @@
 import { useSearchParams, Link } from "react-router-dom";
-import { Search, FileText, ArrowLeft } from "lucide-react";
+import { Search, FileText, ArrowLeft, Folder, FolderOpen } from "lucide-react";
 import { DocsLayout } from "@/components/layout/DocsLayout";
 import { Breadcrumb } from "@/components/docs/Breadcrumb";
 import { SearchBar } from "@/components/docs/SearchBar";
-import { ArticleCard } from "@/components/docs/ArticleCard";
-import { searchArticles, docModules, type DocArticle } from "@/data/docsData";
+import { Badge } from "@/components/ui/badge";
+import { useSearch } from "@/hooks/useSearch";
 
 export default function SearchPage() {
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
+  const { results, loading } = useSearch(query);
 
-  const results = query.trim() ? searchArticles(query) : [];
+  const getResultPath = (result: typeof results[0]) => {
+    if (result.type === 'module') return `/docs/${result.slug}`;
+    if (result.type === 'submodule') return `/docs/${result.moduleSlug}/${result.slug}`;
+    return `/docs/${result.moduleSlug}/${result.subModuleSlug}/${result.slug}`;
+  };
 
-  const getArticlePath = (article: DocArticle) => {
-    for (const mod of docModules) {
-      for (const sub of mod.subModules) {
-        if (sub.articles.find((a) => a.id === article.id)) {
-          return { module: mod, subModule: sub };
-        }
-      }
-    }
-    return null;
+  const getResultIcon = (type: string) => {
+    if (type === 'module') return <FolderOpen className="h-6 w-6 text-primary" />;
+    if (type === 'submodule') return <Folder className="h-6 w-6 text-secondary" />;
+    return <FileText className="h-6 w-6 text-muted-foreground" />;
   };
 
   return (
@@ -39,7 +39,9 @@ export default function SearchPage() {
           <>
             <div className="mb-6">
               <p className="text-muted-foreground">
-                {results.length > 0 ? (
+                {loading ? (
+                  'جاري البحث...'
+                ) : results.length > 0 ? (
                   <>
                     تم العثور على <span className="font-semibold text-foreground">{results.length}</span> نتيجة لـ "{query}"
                   </>
@@ -50,19 +52,35 @@ export default function SearchPage() {
             </div>
 
             {results.length > 0 ? (
-              <div className="space-y-4">
-                {results.map((article) => {
-                  const path = getArticlePath(article);
-                  if (!path) return null;
-                  return (
-                    <ArticleCard
-                      key={article.id}
-                      article={article}
-                      moduleSlug={path.module.slug}
-                      subModuleSlug={path.subModule.slug}
-                    />
-                  );
-                })}
+              <div className="space-y-3">
+                {results.map((result) => (
+                  <Link
+                    key={result.id}
+                    to={getResultPath(result)}
+                    className="docs-card block p-5 group hover:border-primary/50 transition-colors"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="mt-1">{getResultIcon(result.type)}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="text-lg font-semibold group-hover:text-primary transition-colors">
+                            {result.title}
+                          </h3>
+                          <Badge variant="secondary" className="text-xs">
+                            {result.type === 'module' ? 'وحدة' : result.type === 'submodule' ? 'قسم فرعي' : 'مقال'}
+                          </Badge>
+                        </div>
+                        {result.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {result.description}
+                          </p>
+                        )}
+                      </div>
+                      <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all mt-1" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
               </div>
             ) : (
               <div className="text-center py-16 px-6 rounded-2xl bg-muted/50">

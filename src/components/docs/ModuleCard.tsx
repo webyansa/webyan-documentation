@@ -4,8 +4,13 @@ import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DocModule } from "@/data/docsData";
 
+type DocModuleWithStats = DocModule & {
+  subModulesCount?: number;
+  articlesCount?: number;
+};
+
 interface ModuleCardProps {
-  module: DocModule;
+  module: DocModuleWithStats;
   className?: string;
 }
 
@@ -16,10 +21,16 @@ function getIcon(iconName: string) {
 
 export function ModuleCard({ module, className }: ModuleCardProps) {
   const IconComponent = getIcon(module.icon);
-  const totalArticles = module.subModules.reduce(
-    (sum, sm) => sum + sm.articles.length,
-    0
-  );
+
+  const subModulesCount =
+    typeof module.subModulesCount === "number"
+      ? module.subModulesCount
+      : module.subModules.length;
+
+  const articlesCount =
+    typeof module.articlesCount === "number"
+      ? module.articlesCount
+      : module.subModules.reduce((sum, sm) => sum + sm.articles.length, 0);
 
   return (
     <Link
@@ -48,7 +59,7 @@ export function ModuleCard({ module, className }: ModuleCardProps) {
 
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
-              {module.subModules.length} قسم • {totalArticles} مقال
+              {subModulesCount} قسم • {articlesCount} مقال
             </span>
             <ArrowLeft className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all" />
           </div>

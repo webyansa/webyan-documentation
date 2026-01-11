@@ -15,6 +15,7 @@ interface Module {
   icon: string;
   color: string;
   subModulesCount: number;
+  articlesCount: number;
 }
 
 interface PopularArticle {
@@ -38,31 +39,51 @@ export default function HomePage() {
 
   const fetchData = async () => {
     try {
-      // Fetch modules with submodule count
-      const { data: modulesData, error: modulesError } = await supabase
-        .from('docs_modules')
-        .select('id, slug, title, description, icon, color')
-        .eq('is_published', true)
-        .order('sort_order');
-
-      if (modulesError) throw modulesError;
-
-      const modulesWithCount: Module[] = [];
-      for (const mod of modulesData || []) {
-        const { count } = await supabase
+      // Fetch modules + submodules + articles (published) in parallel for speed
+      const [modulesRes, submodulesRes, articlesRes] = await Promise.all([
+        supabase
+          .from('docs_modules')
+          .select('id, slug, title, description, icon, color')
+          .eq('is_published', true)
+          .order('sort_order'),
+        supabase
           .from('docs_submodules')
-          .select('*', { count: 'exact', head: true })
-          .eq('module_id', mod.id)
-          .eq('is_published', true);
+          .select('id, module_id')
+          .eq('is_published', true),
+        supabase
+          .from('docs_articles')
+          .select('id, submodule_id')
+          .eq('status', 'published'),
+      ]);
 
-        modulesWithCount.push({
-          ...mod,
-          icon: mod.icon || 'BookOpen',
-          color: mod.color || 'primary',
-          subModulesCount: count || 0,
-        });
+      if (modulesRes.error) throw modulesRes.error;
+      if (submodulesRes.error) throw submodulesRes.error;
+      if (articlesRes.error) throw articlesRes.error;
+
+      const moduleSubCount: Record<string, number> = {};
+      const moduleArticleCount: Record<string, number> = {};
+      const submoduleToModule: Record<string, string> = {};
+
+      for (const sub of submodulesRes.data || []) {
+        submoduleToModule[sub.id] = sub.module_id;
+        moduleSubCount[sub.module_id] = (moduleSubCount[sub.module_id] || 0) + 1;
       }
-      setModules(modulesWithCount);
+
+      for (const art of articlesRes.data || []) {
+        const moduleId = submoduleToModule[art.submodule_id];
+        if (!moduleId) continue;
+        moduleArticleCount[moduleId] = (moduleArticleCount[moduleId] || 0) + 1;
+      }
+
+      const modulesWithCounts: Module[] = (modulesRes.data || []).map((mod) => ({
+        ...mod,
+        icon: mod.icon || 'BookOpen',
+        color: mod.color || 'primary',
+        subModulesCount: moduleSubCount[mod.id] || 0,
+        articlesCount: moduleArticleCount[mod.id] || 0,
+      }));
+
+      setModules(modulesWithCounts);
 
       // Fetch popular articles
       const { data: articlesData, error: articlesError } = await supabase
@@ -215,18 +236,20 @@ export default function HomePage() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {modules.map((module) => (
-              <ModuleCard
-                key={module.id}
-                module={{
-                  id: module.id,
-                  slug: module.slug,
-                  title: module.title,
-                  description: module.description || '',
-                  icon: module.icon,
-                  color: module.color,
-                  subModules: [],
-                }}
-              />
+                <ModuleCard
+                  key={module.id}
+                  module={{
+                    id: module.id,
+                    slug: module.slug,
+                    title: module.title,
+                    description: module.description || '',
+                    icon: module.icon,
+                    color: module.color,
+                    subModules: [],
+                    subModulesCount: module.subModulesCount,
+                    articlesCount: module.articlesCount,
+                  }}
+                />
             ))}
           </div>
         )}
