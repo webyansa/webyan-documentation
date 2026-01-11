@@ -19,6 +19,7 @@ import { Separator } from '@/components/ui/separator';
 import { ArrowRight, Save, Eye, Loader2, Plus, X, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import RichTextEditor from '@/components/editor/RichTextEditor';
 
 // Validation schema
 const articleSchema = z.object({

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -17,12 +18,19 @@ import {
   TrendingUp,
   Users,
   Clock,
+  Image,
+  ArrowUpRight,
+  BarChart3,
+  Loader2,
 } from 'lucide-react';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 interface Stats {
   totalArticles: number;
   publishedArticles: number;
   draftArticles: number;
+  archivedArticles: number;
   totalModules: number;
   totalSubmodules: number;
   totalFeedback: number;
@@ -30,6 +38,21 @@ interface Stats {
   notHelpfulFeedback: number;
   totalSearches: number;
   openIssues: number;
+  totalViews: number;
+  totalMedia: number;
+}
+
+interface RecentArticle {
+  id: string;
+  title: string;
+  status: string;
+  views_count: number;
+  updated_at: string;
+}
+
+interface TopSearch {
+  query: string;
+  count: number;
 }
 
 export default function DashboardPage() {
@@ -38,6 +61,7 @@ export default function DashboardPage() {
     totalArticles: 0,
     publishedArticles: 0,
     draftArticles: 0,
+    archivedArticles: 0,
     totalModules: 0,
     totalSubmodules: 0,
     totalFeedback: 0,
@@ -45,26 +69,26 @@ export default function DashboardPage() {
     notHelpfulFeedback: 0,
     totalSearches: 0,
     openIssues: 0,
+    totalViews: 0,
+    totalMedia: 0,
   });
+  const [recentArticles, setRecentArticles] = useState<RecentArticle[]>([]);
+  const [topSearches, setTopSearches] = useState<TopSearch[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        // Fetch articles count
-        const { count: totalArticles } = await supabase
+        // Fetch articles count and views
+        const { data: articles } = await supabase
           .from('docs_articles')
-          .select('*', { count: 'exact', head: true });
+          .select('id, status, views_count');
 
-        const { count: publishedArticles } = await supabase
-          .from('docs_articles')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'published');
-
-        const { count: draftArticles } = await supabase
-          .from('docs_articles')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'draft');
+        const totalArticles = articles?.length || 0;
+        const publishedArticles = articles?.filter(a => a.status === 'published').length || 0;
+        const draftArticles = articles?.filter(a => a.status === 'draft').length || 0;
+        const archivedArticles = articles?.filter(a => a.status === 'archived').length || 0;
+        const totalViews = articles?.reduce((sum, a) => sum + (a.views_count || 0), 0) || 0;
 
         // Fetch modules count
         const { count: totalModules } = await supabase
@@ -74,6 +98,26 @@ export default function DashboardPage() {
         const { count: totalSubmodules } = await supabase
           .from('docs_submodules')
           .select('*', { count: 'exact', head: true });
+
+        // Fetch recent articles
+        const { data: recentData } = await supabase
+          .from('docs_articles')
+          .select('id, title, status, views_count, updated_at')
+          .order('updated_at', { ascending: false })
+          .limit(5);
+
+        setRecentArticles(recentData || []);
+
+        // Fetch media count
+        let mediaCount = 0;
+        try {
+          const { data: mediaData } = await supabase.storage
+            .from('docs-media')
+            .list('', { limit: 1000 });
+          mediaCount = mediaData?.filter(f => f.name !== '.emptyFolderPlaceholder').length || 0;
+        } catch (e) {
+          console.log('No media bucket yet');
+        }
 
         // Fetch feedback stats (admin only)
         let feedbackStats = { total: 0, helpful: 0, notHelpful: 0 };
@@ -104,6 +148,25 @@ export default function DashboardPage() {
             .select('*', { count: 'exact', head: true })
             .eq('status', 'open');
 
+          // Fetch top searches
+          const { data: searchData } = await supabase
+            .from('docs_search_logs')
+            .select('query')
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+          if (searchData) {
+            const searchCounts: Record<string, number> = {};
+            searchData.forEach(s => {
+              searchCounts[s.query] = (searchCounts[s.query] || 0) + 1;
+            });
+            const sorted = Object.entries(searchCounts)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 5)
+              .map(([query, count]) => ({ query, count }));
+            setTopSearches(sorted);
+          }
+
           feedbackStats = {
             total: totalFeedback || 0,
             helpful: helpfulFeedback || 0,
@@ -114,9 +177,10 @@ export default function DashboardPage() {
         }
 
         setStats({
-          totalArticles: totalArticles || 0,
-          publishedArticles: publishedArticles || 0,
-          draftArticles: draftArticles || 0,
+          totalArticles,
+          publishedArticles,
+          draftArticles,
+          archivedArticles,
           totalModules: totalModules || 0,
           totalSubmodules: totalSubmodules || 0,
           totalFeedback: feedbackStats.total,
@@ -124,6 +188,8 @@ export default function DashboardPage() {
           notHelpfulFeedback: feedbackStats.notHelpful,
           totalSearches: searchCount,
           openIssues: issuesCount,
+          totalViews,
+          totalMedia: mediaCount,
         });
       } catch (error) {
         console.error('Error fetching stats:', error);
@@ -138,6 +204,18 @@ export default function DashboardPage() {
   const helpfulRate = stats.totalFeedback > 0 
     ? Math.round((stats.helpfulFeedback / stats.totalFeedback) * 100) 
     : 0;
+
+  const publishedRate = stats.totalArticles > 0
+    ? Math.round((stats.publishedArticles / stats.totalArticles) * 100)
+    : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -159,22 +237,48 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Main Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">إجمالي المقالات</CardTitle>
+            <CardTitle className="text-sm font-medium">المقالات</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalArticles}</div>
-            <div className="flex gap-2 mt-1">
-              <Badge variant="secondary" className="text-xs">
+            <div className="flex gap-2 mt-2 flex-wrap">
+              <Badge variant="default" className="text-xs bg-green-500">
                 {stats.publishedArticles} منشور
               </Badge>
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="secondary" className="text-xs">
                 {stats.draftArticles} مسودة
               </Badge>
+              {stats.archivedArticles > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  {stats.archivedArticles} مؤرشف
+                </Badge>
+              )}
+            </div>
+            <Progress value={publishedRate} className="mt-3 h-2" />
+            <p className="text-xs text-muted-foreground mt-1">
+              {publishedRate}% معدل النشر
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">المشاهدات</CardTitle>
+            <Eye className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalViews.toLocaleString('ar-EG')}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              إجمالي مشاهدات المقالات
+            </p>
+            <div className="flex items-center gap-1 mt-2 text-green-600 text-sm">
+              <TrendingUp className="h-3 w-3" />
+              <span>نشط</span>
             </div>
           </CardContent>
         </Card>
@@ -187,51 +291,157 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalModules}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              وحدة رئيسية • {stats.totalSubmodules} قسم فرعي
+              وحدة رئيسية
             </p>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge variant="outline">{stats.totalSubmodules} قسم فرعي</Badge>
+            </div>
           </CardContent>
         </Card>
 
-        {isAdmin && (
-          <>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">معدل الإفادة</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{helpfulRate}%</div>
-                <div className="flex gap-2 mt-1 text-xs">
-                  <span className="flex items-center gap-1 text-green-600">
-                    <ThumbsUp className="h-3 w-3" />
-                    {stats.helpfulFeedback}
-                  </span>
-                  <span className="flex items-center gap-1 text-red-600">
-                    <ThumbsDown className="h-3 w-3" />
-                    {stats.notHelpfulFeedback}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">عمليات البحث</CardTitle>
-                <Search className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalSearches}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  إجمالي عمليات البحث
-                </p>
-              </CardContent>
-            </Card>
-          </>
-        )}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">الوسائط</CardTitle>
+            <Image className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalMedia}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              ملف مرفوع
+            </p>
+            <Link to="/admin/media" className="text-primary text-sm flex items-center gap-1 mt-2 hover:underline">
+              إدارة الوسائط
+              <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Quick Actions */}
+      {/* Admin-only stats */}
+      {isAdmin && (
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">معدل الإفادة</CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{helpfulRate}%</div>
+              <div className="flex gap-4 mt-2 text-sm">
+                <span className="flex items-center gap-1 text-green-600">
+                  <ThumbsUp className="h-4 w-4" />
+                  {stats.helpfulFeedback}
+                </span>
+                <span className="flex items-center gap-1 text-red-600">
+                  <ThumbsDown className="h-4 w-4" />
+                  {stats.notHelpfulFeedback}
+                </span>
+              </div>
+              <Progress value={helpfulRate} className="mt-3 h-2" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">عمليات البحث</CardTitle>
+              <Search className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalSearches}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                إجمالي عمليات البحث
+              </p>
+              <Link to="/admin/search-logs" className="text-primary text-sm flex items-center gap-1 mt-2 hover:underline">
+                عرض السجلات
+                <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card className={stats.openIssues > 0 ? 'border-orange-200 bg-orange-50 dark:bg-orange-950/20' : ''}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">البلاغات المفتوحة</CardTitle>
+              <AlertTriangle className={`h-4 w-4 ${stats.openIssues > 0 ? 'text-orange-500' : 'text-muted-foreground'}`} />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.openIssues}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                بلاغ يحتاج مراجعة
+              </p>
+              {stats.openIssues > 0 && (
+                <Link to="/admin/issues">
+                  <Button size="sm" variant="outline" className="mt-2 w-full border-orange-300 text-orange-700 hover:bg-orange-100">
+                    مراجعة البلاغات
+                  </Button>
+                </Link>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Recent Activity & Quick Actions */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {/* Recent Articles */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="h-5 w-5 text-muted-foreground" />
+              آخر المقالات المحدثة
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {recentArticles.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                لا توجد مقالات حديثة
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {recentArticles.map((article) => (
+                  <Link
+                    key={article.id}
+                    to={`/admin/articles/${article.id}`}
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-muted transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium text-sm">{article.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {format(new Date(article.updated_at), 'dd MMM yyyy', { locale: ar })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          article.status === 'published'
+                            ? 'default'
+                            : article.status === 'draft'
+                            ? 'secondary'
+                            : 'outline'
+                        }
+                        className="text-xs"
+                      >
+                        {article.status === 'published'
+                          ? 'منشور'
+                          : article.status === 'draft'
+                          ? 'مسودة'
+                          : 'مؤرشف'}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Eye className="h-3 w-3" />
+                        {article.views_count || 0}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Quick Actions */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">إجراءات سريعة</CardTitle>
@@ -252,51 +462,44 @@ export default function DashboardPage() {
             </Link>
             <Link to="/admin/media" className="block">
               <Button variant="outline" className="w-full justify-start gap-2">
-                <FileText className="h-4 w-4" />
+                <Image className="h-4 w-4" />
                 رفع صور جديدة
+              </Button>
+            </Link>
+            <Link to="/admin/articles" className="block">
+              <Button variant="outline" className="w-full justify-start gap-2">
+                <FileText className="h-4 w-4" />
+                إدارة المقالات
               </Button>
             </Link>
           </CardContent>
         </Card>
+      </div>
 
-        {isAdmin && stats.openIssues > 0 && (
-          <Card className="border-orange-200 bg-orange-50">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2 text-orange-700">
-                <AlertTriangle className="h-5 w-5" />
-                بلاغات تحتاج مراجعة
-              </CardTitle>
-              <CardDescription className="text-orange-600">
-                {stats.openIssues} بلاغ مفتوح
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link to="/admin/issues">
-                <Button variant="outline" className="w-full border-orange-300 text-orange-700 hover:bg-orange-100">
-                  مراجعة البلاغات
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        )}
-
+      {/* Top Searches (Admin only) */}
+      {isAdmin && topSearches.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Clock className="h-5 w-5 text-muted-foreground" />
-              آخر التحديثات
+              <Search className="h-5 w-5 text-muted-foreground" />
+              أكثر عمليات البحث
             </CardTitle>
-            <CardDescription>
-              سيتم عرض آخر التحديثات هنا
-            </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground text-center py-4">
-              لا توجد تحديثات حديثة
-            </p>
+            <div className="grid gap-2 md:grid-cols-5">
+              {topSearches.map((search, index) => (
+                <div
+                  key={search.query}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted"
+                >
+                  <span className="text-sm font-medium truncate">{search.query}</span>
+                  <Badge variant="secondary">{search.count}</Badge>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
-      </div>
+      )}
     </div>
   );
 }
