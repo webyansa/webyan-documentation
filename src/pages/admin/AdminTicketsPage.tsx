@@ -147,6 +147,26 @@ export default function AdminTicketsPage() {
     setViewDialogOpen(true);
   };
 
+  const getTicketEmail = async (ticket: SupportTicket): Promise<string | null> => {
+    // If guest ticket, use guest_email
+    if (ticket.guest_email) {
+      return ticket.guest_email;
+    }
+    
+    // If registered user, fetch email from profiles
+    if (ticket.user_id) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('id', ticket.user_id)
+        .single();
+      
+      return profile?.email || null;
+    }
+    
+    return null;
+  };
+
   const handleStatusChange = async (ticketId: string, newStatus: string) => {
     try {
       const ticket = tickets.find(t => t.id === ticketId);
@@ -182,8 +202,8 @@ export default function AdminTicketsPage() {
         });
       }
 
-      // Send notification email
-      const email = ticket.guest_email || '';
+      // Get email and send notification
+      const email = await getTicketEmail(ticket);
       if (email) {
         const siteUrl = window.location.origin;
         await supabase.functions.invoke('send-ticket-notification', {
@@ -196,6 +216,7 @@ export default function AdminTicketsPage() {
             siteUrl,
           },
         });
+        console.log(`Status update notification sent to ${email}`);
       }
 
       toast({
@@ -246,8 +267,8 @@ export default function AdminTicketsPage() {
         });
       }
 
-      // Send notification email
-      const email = selectedTicket.guest_email || '';
+      // Get email and send notification
+      const email = await getTicketEmail(selectedTicket);
       if (email) {
         const siteUrl = window.location.origin;
         await supabase.functions.invoke('send-ticket-notification', {
@@ -260,6 +281,7 @@ export default function AdminTicketsPage() {
             siteUrl,
           },
         });
+        console.log(`Reply notification sent to ${email}`);
       }
 
       setNewReply('');

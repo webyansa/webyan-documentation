@@ -33,18 +33,50 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log(`Tracking ticket ${ticketNumber} for ${email}`);
+    const ticketNumberClean = ticketNumber.trim().toUpperCase();
+    const emailClean = email.trim().toLowerCase();
 
-    // Find ticket by ticket number and guest email
-    const { data: ticket, error: ticketError } = await supabase
+    console.log(`Tracking ticket ${ticketNumberClean} for ${emailClean}`);
+
+    // First try to find ticket by guest_email
+    let { data: ticket, error: ticketError } = await supabase
       .from("support_tickets")
       .select("*")
-      .eq("ticket_number", ticketNumber.toUpperCase())
-      .eq("guest_email", email.toLowerCase())
-      .single();
+      .eq("ticket_number", ticketNumberClean)
+      .eq("guest_email", emailClean)
+      .maybeSingle();
 
-    if (ticketError || !ticket) {
-      console.log("Ticket not found:", ticketError);
+    // If not found, try to find by user profile email
+    if (!ticket) {
+      console.log("Ticket not found by guest_email, trying profiles...");
+      
+      // Find user by email in profiles
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, email")
+        .eq("email", emailClean)
+        .maybeSingle();
+
+      if (profile) {
+        console.log(`Found profile for ${emailClean}, user_id: ${profile.id}`);
+        
+        // Find ticket by user_id
+        const { data: userTicket, error: userTicketError } = await supabase
+          .from("support_tickets")
+          .select("*")
+          .eq("ticket_number", ticketNumberClean)
+          .eq("user_id", profile.id)
+          .maybeSingle();
+
+        if (userTicket) {
+          ticket = userTicket;
+          console.log(`Found ticket ${ticketNumberClean} for user ${profile.id}`);
+        }
+      }
+    }
+
+    if (!ticket) {
+      console.log("Ticket not found");
       return new Response(
         JSON.stringify({ error: "لم يتم العثور على التذكرة. تأكد من صحة البيانات." }),
         { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -62,7 +94,7 @@ const handler = async (req: Request): Promise<Response> => {
       console.error("Error fetching replies:", repliesError);
     }
 
-    console.log(`Found ticket ${ticketNumber} with ${replies?.length || 0} replies`);
+    console.log(`Found ticket ${ticketNumberClean} with ${replies?.length || 0} replies`);
 
     return new Response(
       JSON.stringify({ 
