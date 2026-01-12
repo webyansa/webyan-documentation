@@ -149,6 +149,9 @@ export default function AdminTicketsPage() {
 
   const handleStatusChange = async (ticketId: string, newStatus: string) => {
     try {
+      const ticket = tickets.find(t => t.id === ticketId);
+      if (!ticket) return;
+
       const updateData: any = { status: newStatus };
       if (newStatus === 'resolved') {
         updateData.resolved_at = new Date().toISOString();
@@ -162,20 +165,37 @@ export default function AdminTicketsPage() {
 
       if (error) throw error;
 
+      const statusLabels: Record<string, string> = {
+        open: 'مفتوحة',
+        in_progress: 'قيد المعالجة',
+        resolved: 'تم الحل',
+        closed: 'مغلقة',
+      };
+
+      // Create in-app notification if user_id exists
+      if (ticket.user_id) {
+        await supabase.from('user_notifications').insert({
+          user_id: ticket.user_id,
+          title: 'تحديث حالة التذكرة',
+          message: `تم تغيير حالة تذكرتك "${ticket.subject}" إلى ${statusLabels[newStatus] || newStatus}`,
+          type: 'ticket_update',
+        });
+      }
+
       // Send notification email
-      const ticket = tickets.find(t => t.id === ticketId);
-      if (ticket && newStatus === 'resolved') {
-        const email = ticket.guest_email || '';
-        if (email) {
-          await supabase.functions.invoke('send-ticket-notification', {
-            body: {
-              email,
-              ticketNumber: ticket.ticket_number,
-              subject: ticket.subject,
-              type: 'resolved',
-            },
-          });
-        }
+      const email = ticket.guest_email || '';
+      if (email) {
+        const siteUrl = window.location.origin;
+        await supabase.functions.invoke('send-ticket-notification', {
+          body: {
+            email,
+            ticketNumber: ticket.ticket_number,
+            subject: ticket.subject,
+            type: newStatus === 'resolved' ? 'resolved' : 'status_update',
+            newStatus,
+            siteUrl,
+          },
+        });
       }
 
       toast({
@@ -216,9 +236,20 @@ export default function AdminTicketsPage() {
           .eq('id', selectedTicket.id);
       }
 
+      // Create in-app notification if user_id exists
+      if (selectedTicket.user_id) {
+        await supabase.from('user_notifications').insert({
+          user_id: selectedTicket.user_id,
+          title: 'رد جديد على تذكرتك',
+          message: `تم إضافة رد جديد على تذكرتك "${selectedTicket.subject}"`,
+          type: 'ticket_reply',
+        });
+      }
+
       // Send notification email
       const email = selectedTicket.guest_email || '';
       if (email) {
+        const siteUrl = window.location.origin;
         await supabase.functions.invoke('send-ticket-notification', {
           body: {
             email,
@@ -226,6 +257,7 @@ export default function AdminTicketsPage() {
             subject: selectedTicket.subject,
             type: 'reply',
             message: newReply,
+            siteUrl,
           },
         });
       }

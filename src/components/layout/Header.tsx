@@ -66,7 +66,7 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
             <Link to="/changelog">التحديثات</Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link to="/report-issue">إبلاغ عن مشكلة</Link>
+            <Link to="/submit-ticket">إبلاغ عن مشكلة</Link>
           </Button>
           
           {user ? (

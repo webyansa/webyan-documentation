@@ -31,6 +31,7 @@ import {
   Menu,
   BookOpen,
   Home,
+  Ticket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import webyanLogo from '@/assets/webyan-logo.svg';
@@ -54,6 +55,7 @@ const navItems: NavItem[] = [
 ];
 
 const adminOnlyItems: NavItem[] = [
+  { title: 'تذاكر الدعم', href: '/admin/tickets', icon: Ticket, requiredRole: 'admin' },
   { title: 'التقييمات', href: '/admin/feedback', icon: MessageSquare, requiredRole: 'admin' },
   { title: 'البلاغات', href: '/admin/issues', icon: AlertTriangle, requiredRole: 'admin' },
   { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, requiredRole: 'admin' },

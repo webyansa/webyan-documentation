@@ -13,8 +13,10 @@ interface TicketNotificationRequest {
   email: string;
   ticketNumber: string;
   subject: string;
-  type: 'created' | 'reply' | 'resolved';
+  type: 'created' | 'reply' | 'resolved' | 'status_update';
   message?: string;
+  newStatus?: string;
+  siteUrl?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -23,27 +25,40 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { email, ticketNumber, subject, type, message }: TicketNotificationRequest = await req.json();
+    const { email, ticketNumber, subject, type, message, newStatus, siteUrl }: TicketNotificationRequest = await req.json();
 
     console.log(`Sending ticket notification to ${email} for ticket ${ticketNumber}`);
+
+    const statusLabels: Record<string, string> = {
+      open: 'مفتوحة',
+      in_progress: 'قيد المعالجة',
+      resolved: 'تم الحل',
+      closed: 'مغلقة',
+    };
 
     const subjects: Record<string, string> = {
       created: `تم استلام تذكرتك رقم ${ticketNumber}`,
       reply: `رد جديد على التذكرة ${ticketNumber}`,
       resolved: `تم حل التذكرة ${ticketNumber}`,
+      status_update: `تحديث حالة التذكرة ${ticketNumber}`,
     };
 
     const titles: Record<string, string> = {
       created: 'تم استلام تذكرتك بنجاح! ✅',
       reply: 'لديك رد جديد على تذكرتك 💬',
       resolved: 'تم حل تذكرتك! 🎉',
+      status_update: `تم تحديث حالة تذكرتك إلى: ${statusLabels[newStatus || ''] || newStatus} 📋`,
     };
 
     const messages: Record<string, string> = {
       created: 'تم استلام طلب الدعم الخاص بك وسيتم الرد عليه في أقرب وقت ممكن.',
       reply: message || 'تم إضافة رد جديد على تذكرتك، يرجى مراجعة التذكرة للاطلاع على التفاصيل.',
       resolved: 'تم حل المشكلة المذكورة في تذكرتك. إذا كان لديك أي استفسارات إضافية، لا تتردد في فتح تذكرة جديدة.',
+      status_update: `تم تغيير حالة تذكرتك إلى "${statusLabels[newStatus || ''] || newStatus}". يرجى متابعة التذكرة للاطلاع على آخر المستجدات.`,
     };
+
+    // Use siteUrl if provided, otherwise fallback to a default
+    const baseUrl = siteUrl || 'https://docs.webyan.org';
 
     const emailResponse = await resend.emails.send({
       from: "دعم ويبيان <onboarding@resend.dev>",
@@ -89,7 +104,7 @@ const handler = async (req: Request): Promise<Response> => {
               </div>
               <p class="message">${messages[type]}</p>
               <div style="text-align: center;">
-                <a href="${Deno.env.get("SUPABASE_URL")?.replace('.supabase.co', '')}/my-tickets" class="button">عرض التذكرة</a>
+                <a href="${baseUrl}/track-ticket" class="button">تتبع التذكرة</a>
               </div>
             </div>
             <div class="footer">

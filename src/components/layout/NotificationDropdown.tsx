@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Bell, Check, CheckCheck, Trash2, FileText } from 'lucide-react';
+import { Bell, Check, CheckCheck, Trash2, FileText, Ticket, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -10,10 +10,31 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { useNotifications } from '@/hooks/useNotifications';
+import { useNotifications, Notification } from '@/hooks/useNotifications';
 import { formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+
+const getNotificationIcon = (type: string) => {
+  switch (type) {
+    case 'ticket_update':
+    case 'ticket_reply':
+      return Ticket;
+    case 'new_article':
+    default:
+      return FileText;
+  }
+};
+
+const getNotificationLink = (notif: Notification) => {
+  if (notif.type === 'ticket_update' || notif.type === 'ticket_reply') {
+    return '/my-tickets';
+  }
+  if (notif.article_id) {
+    return `/docs/article/${notif.article_id}`;
+  }
+  return null;
+};
 
 export function NotificationDropdown() {
   const {
@@ -60,69 +81,77 @@ export function NotificationDropdown() {
               لا توجد إشعارات
             </div>
           ) : (
-            notifications.map((notif) => (
-              <div
-                key={notif.id}
-                className={cn(
-                  'p-3 border-b last:border-0 hover:bg-muted/50 transition-colors',
-                  !notif.is_read && 'bg-primary/5'
-                )}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={cn(
-                      'mt-1 p-1.5 rounded-full',
-                      notif.type === 'new_article'
-                        ? 'bg-primary/10 text-primary'
-                        : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    <FileText className="h-3 w-3" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{notif.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {notif.message}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {formatDistanceToNow(new Date(notif.created_at), {
-                        addSuffix: true,
-                        locale: ar,
-                      })}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {!notif.is_read && (
+            notifications.map((notif) => {
+              const IconComponent = getNotificationIcon(notif.type);
+              const link = getNotificationLink(notif);
+              const isTicketNotif = notif.type === 'ticket_update' || notif.type === 'ticket_reply';
+              
+              return (
+                <div
+                  key={notif.id}
+                  className={cn(
+                    'p-3 border-b last:border-0 hover:bg-muted/50 transition-colors',
+                    !notif.is_read && 'bg-primary/5'
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        'mt-1 p-1.5 rounded-full',
+                        isTicketNotif
+                          ? 'bg-orange-100 text-orange-600'
+                          : notif.type === 'new_article'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-muted text-muted-foreground'
+                      )}
+                    >
+                      <IconComponent className="h-3 w-3" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{notif.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {notif.message}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatDistanceToNow(new Date(notif.created_at), {
+                          addSuffix: true,
+                          locale: ar,
+                        })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {!notif.is_read && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => markAsRead(notif.id)}
+                        >
+                          <Check className="h-3 w-3" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7"
-                        onClick={() => markAsRead(notif.id)}
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => deleteNotification(notif.id)}
                       >
-                        <Check className="h-3 w-3" />
+                        <Trash2 className="h-3 w-3" />
                       </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={() => deleteNotification(notif.id)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                    </div>
                   </div>
+                  {link && (
+                    <Link
+                      to={link}
+                      className="text-xs text-primary hover:underline mt-2 block"
+                      onClick={() => markAsRead(notif.id)}
+                    >
+                      {isTicketNotif ? 'عرض التذاكر' : 'عرض المقال'}
+                    </Link>
+                  )}
                 </div>
-                {notif.article_id && (
-                  <Link
-                    to={`/docs/article/${notif.article_id}`}
-                    className="text-xs text-primary hover:underline mt-2 block"
-                    onClick={() => markAsRead(notif.id)}
-                  >
-                    عرض المقال
-                  </Link>
-                )}
-              </div>
-            ))
+              );
+            })
           )}
         </ScrollArea>
       </DropdownMenuContent>
