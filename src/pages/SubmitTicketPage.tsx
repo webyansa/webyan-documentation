@@ -101,7 +101,7 @@ export default function SubmitTicketPage() {
             screenshot_url: screenshotUrl,
             category: formData.category,
             priority: formData.priority,
-          })
+          } as any)
           .select()
           .single();
 

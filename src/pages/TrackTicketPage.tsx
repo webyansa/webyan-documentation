@@ -43,19 +43,20 @@ export default function TrackTicketPage() {
     setTicketInfo(null);
 
     try {
-      const { data, error } = await supabase
-        .from('support_tickets')
-        .select('*')
-        .eq('ticket_number', ticketNumber.trim().toUpperCase())
-        .eq('guest_email', email.trim().toLowerCase())
-        .single();
+      // Use edge function to track guest tickets (bypasses RLS)
+      const { data, error } = await supabase.functions.invoke('track-guest-ticket', {
+        body: {
+          ticketNumber: ticketNumber.trim(),
+          email: email.trim(),
+        },
+      });
 
-      if (error || !data) {
+      if (error || !data?.ticket) {
         setNotFound(true);
         return;
       }
 
-      setTicketInfo(data);
+      setTicketInfo(data.ticket);
     } catch (error) {
       console.error('Error searching ticket:', error);
       toast.error('حدث خطأ أثناء البحث');
