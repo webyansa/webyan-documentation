@@ -106,6 +106,11 @@ export function useSidebarData() {
         { event: '*', schema: 'public', table: 'docs_submodules' },
         () => fetchSidebarData()
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'docs_articles' },
+        () => fetchSidebarData()
+      )
       .subscribe();
 
     return () => {
