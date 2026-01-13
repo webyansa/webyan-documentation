@@ -126,8 +126,9 @@ export default function SubmitTicketPage() {
         ticket = data;
       }
 
-      // Send email notification
+      // Send email notification to customer and admin
       const email = user?.email || formData.guestEmail;
+      const customerName = user?.email || formData.guestName || formData.guestEmail;
       if (email) {
         await supabase.functions.invoke('send-ticket-notification', {
           body: {
@@ -136,6 +137,7 @@ export default function SubmitTicketPage() {
             subject: formData.subject,
             type: 'created',
             siteUrl: window.location.origin,
+            customerName,
           },
         });
       }
