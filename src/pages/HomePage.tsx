@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Rocket, TrendingUp, Clock, ArrowLeft, Loader2 } from "lucide-react";
+import { BookOpen, Rocket, TrendingUp, Clock, ArrowLeft, Loader2, Building2, Ticket } from "lucide-react";
 import { DocsLayout } from "@/components/layout/DocsLayout";
 import { SearchBar } from "@/components/docs/SearchBar";
 import { ModuleCard } from "@/components/docs/ModuleCard";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import webyanLogo from "@/assets/webyan-logo.svg";
 
 interface Module {
@@ -29,13 +30,29 @@ interface PopularArticle {
 }
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [modules, setModules] = useState<Module[]>([]);
   const [popularArticles, setPopularArticles] = useState<PopularArticle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     fetchData();
-  }, []);
+    if (user) {
+      checkIfClient();
+    }
+  }, [user]);
+
+  const checkIfClient = async () => {
+    const { data } = await supabase
+      .from('client_accounts')
+      .select('id')
+      .eq('user_id', user?.id)
+      .eq('is_active', true)
+      .maybeSingle();
+    
+    setIsClient(!!data);
+  };
 
   const fetchData = async () => {
     try {
@@ -152,7 +169,7 @@ export default function HomePage() {
 
       {/* Quick Start */}
       <section className="mb-12">
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Link
             to="/getting-started"
             className="docs-card flex items-center gap-4 p-6 group"
@@ -165,7 +182,7 @@ export default function HomePage() {
                 ابدأ هنا
               </h3>
               <p className="text-sm text-muted-foreground">
-                دليل البداية السريعة للمستخدمين الجدد
+                دليل البداية السريعة
               </p>
             </div>
             <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all" />
@@ -180,14 +197,70 @@ export default function HomePage() {
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-semibold group-hover:text-primary transition-colors">
-                مركز التحديثات
+                التحديثات
               </h3>
               <p className="text-sm text-muted-foreground">
-                تعرف على آخر التغييرات والميزات الجديدة
+                آخر الميزات الجديدة
               </p>
             </div>
             <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all" />
           </Link>
+
+          <Link
+            to="/submit-ticket"
+            className="docs-card flex items-center gap-4 p-6 group"
+          >
+            <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-orange-100 text-orange-600 group-hover:scale-110 transition-transform">
+              <Ticket className="h-7 w-7" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold group-hover:text-primary transition-colors">
+                طلب دعم
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                إبلاغ عن مشكلة
+              </p>
+            </div>
+            <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all" />
+          </Link>
+
+          {isClient ? (
+            <Link
+              to="/portal"
+              className="docs-card flex items-center gap-4 p-6 group border-primary/30 bg-primary/5"
+            >
+              <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/20 text-primary group-hover:scale-110 transition-transform">
+                <Building2 className="h-7 w-7" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold group-hover:text-primary transition-colors">
+                  بوابة العملاء
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  إدارة حسابك
+                </p>
+              </div>
+              <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all" />
+            </Link>
+          ) : (
+            <Link
+              to="/track-ticket"
+              className="docs-card flex items-center gap-4 p-6 group"
+            >
+              <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-100 text-blue-600 group-hover:scale-110 transition-transform">
+                <TrendingUp className="h-7 w-7" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold group-hover:text-primary transition-colors">
+                  تتبع تذكرة
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  متابعة حالة تذكرتك
+                </p>
+              </div>
+              <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all" />
+            </Link>
+          )}
         </div>
       </section>
 

@@ -36,6 +36,19 @@ import ReportsPage from "./pages/admin/ReportsPage";
 import UsersPage from "./pages/admin/UsersPage";
 import SettingsPage from "./pages/admin/SettingsPage";
 import AdminTicketsPage from "./pages/admin/AdminTicketsPage";
+import ClientsPage from "./pages/admin/ClientsPage";
+
+// Client Portal pages
+import PortalLayout from "./pages/portal/PortalLayout";
+import PortalDashboard from "./pages/portal/PortalDashboard";
+import PortalTickets from "./pages/portal/PortalTickets";
+import PortalNewTicket from "./pages/portal/PortalNewTicket";
+import PortalTicketDetail from "./pages/portal/PortalTicketDetail";
+import PortalMeetings from "./pages/portal/PortalMeetings";
+import PortalNewMeeting from "./pages/portal/PortalNewMeeting";
+import PortalSubscription from "./pages/portal/PortalSubscription";
+import PortalMessages from "./pages/portal/PortalMessages";
+import PortalSettings from "./pages/portal/PortalSettings";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +75,19 @@ const App = () => (
             <Route path="/docs/:moduleSlug/:subModuleSlug" element={<ModulePage />} />
             <Route path="/docs/:moduleSlug/:subModuleSlug/:articleSlug" element={<ArticlePage />} />
             
+            {/* Client Portal Routes */}
+            <Route path="/portal" element={<PortalLayout />}>
+              <Route index element={<PortalDashboard />} />
+              <Route path="tickets" element={<PortalTickets />} />
+              <Route path="tickets/new" element={<PortalNewTicket />} />
+              <Route path="tickets/:id" element={<PortalTicketDetail />} />
+              <Route path="meetings" element={<PortalMeetings />} />
+              <Route path="meetings/new" element={<PortalNewMeeting />} />
+              <Route path="subscription" element={<PortalSubscription />} />
+              <Route path="messages" element={<PortalMessages />} />
+              <Route path="settings" element={<PortalSettings />} />
+            </Route>
+            
             {/* Admin Routes */}
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<DashboardPage />} />
@@ -79,6 +105,7 @@ const App = () => (
               <Route path="users" element={<UsersPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="tickets" element={<AdminTicketsPage />} />
+              <Route path="clients" element={<ClientsPage />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
