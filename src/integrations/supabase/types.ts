@@ -14,6 +14,122 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_accounts: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean
+          is_primary_contact: boolean
+          job_title: string | null
+          last_login_at: string | null
+          organization_id: string
+          phone: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          is_active?: boolean
+          is_primary_contact?: boolean
+          job_title?: string | null
+          last_login_at?: string | null
+          organization_id: string
+          phone?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          is_primary_contact?: boolean
+          job_title?: string | null
+          last_login_at?: string | null
+          organization_id?: string
+          phone?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "client_organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_organizations: {
+        Row: {
+          address: string | null
+          city: string | null
+          contact_email: string
+          contact_phone: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          logo_url: string | null
+          name: string
+          notes: string | null
+          organization_type: Database["public"]["Enums"]["organization_type"]
+          registration_number: string | null
+          subscription_end_date: string | null
+          subscription_plan: string | null
+          subscription_start_date: string | null
+          subscription_status: Database["public"]["Enums"]["subscription_status"]
+          updated_at: string
+          website_url: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          contact_email: string
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          name: string
+          notes?: string | null
+          organization_type?: Database["public"]["Enums"]["organization_type"]
+          registration_number?: string | null
+          subscription_end_date?: string | null
+          subscription_plan?: string | null
+          subscription_start_date?: string | null
+          subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          updated_at?: string
+          website_url?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          contact_email?: string
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          name?: string
+          notes?: string | null
+          organization_type?: Database["public"]["Enums"]["organization_type"]
+          registration_number?: string | null
+          subscription_end_date?: string | null
+          subscription_plan?: string | null
+          subscription_start_date?: string | null
+          subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          updated_at?: string
+          website_url?: string | null
+        }
+        Relationships: []
+      }
       docs_article_tags: {
         Row: {
           article_id: string
@@ -482,6 +598,68 @@ export type Database = {
         }
         Relationships: []
       }
+      meeting_requests: {
+        Row: {
+          admin_notes: string | null
+          alternative_date: string | null
+          confirmed_date: string | null
+          created_at: string
+          description: string | null
+          duration_minutes: number
+          id: string
+          meeting_link: string | null
+          meeting_type: string
+          organization_id: string
+          preferred_date: string
+          requested_by: string | null
+          status: Database["public"]["Enums"]["meeting_status"]
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          alternative_date?: string | null
+          confirmed_date?: string | null
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number
+          id?: string
+          meeting_link?: string | null
+          meeting_type?: string
+          organization_id: string
+          preferred_date: string
+          requested_by?: string | null
+          status?: Database["public"]["Enums"]["meeting_status"]
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          alternative_date?: string | null
+          confirmed_date?: string | null
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number
+          id?: string
+          meeting_link?: string | null
+          meeting_type?: string
+          organization_id?: string
+          preferred_date?: string
+          requested_by?: string | null
+          status?: Database["public"]["Enums"]["meeting_status"]
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "client_organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -508,6 +686,62 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      subscription_requests: {
+        Row: {
+          admin_response: string | null
+          created_at: string
+          current_plan: string | null
+          id: string
+          notes: string | null
+          organization_id: string
+          processed_at: string | null
+          processed_by: string | null
+          request_type: string
+          requested_by: string | null
+          requested_plan: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          admin_response?: string | null
+          created_at?: string
+          current_plan?: string | null
+          id?: string
+          notes?: string | null
+          organization_id: string
+          processed_at?: string | null
+          processed_by?: string | null
+          request_type?: string
+          requested_by?: string | null
+          requested_plan: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          admin_response?: string | null
+          created_at?: string
+          current_plan?: string | null
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          request_type?: string
+          requested_by?: string | null
+          requested_plan?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "client_organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       support_tickets: {
         Row: {
@@ -701,6 +935,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_client_organization: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -710,11 +945,30 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_admin_or_editor: { Args: { _user_id: string }; Returns: boolean }
+      is_client: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "editor" | "viewer"
       article_status: "draft" | "published" | "archived"
       difficulty_level: "beginner" | "intermediate" | "advanced"
+      meeting_status:
+        | "pending"
+        | "confirmed"
+        | "completed"
+        | "cancelled"
+        | "rescheduled"
+      organization_type:
+        | "charity"
+        | "nonprofit"
+        | "foundation"
+        | "cooperative"
+        | "other"
+      subscription_status:
+        | "trial"
+        | "active"
+        | "pending_renewal"
+        | "expired"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -845,6 +1099,27 @@ export const Constants = {
       app_role: ["admin", "editor", "viewer"],
       article_status: ["draft", "published", "archived"],
       difficulty_level: ["beginner", "intermediate", "advanced"],
+      meeting_status: [
+        "pending",
+        "confirmed",
+        "completed",
+        "cancelled",
+        "rescheduled",
+      ],
+      organization_type: [
+        "charity",
+        "nonprofit",
+        "foundation",
+        "cooperative",
+        "other",
+      ],
+      subscription_status: [
+        "trial",
+        "active",
+        "pending_renewal",
+        "expired",
+        "cancelled",
+      ],
     },
   },
 } as const
