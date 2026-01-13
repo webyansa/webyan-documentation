@@ -12,7 +12,9 @@ import {
   Mail,
   Phone,
   Globe,
-  Calendar
+  Calendar,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -80,12 +82,42 @@ const subscriptionPlans = [
   { value: 'enterprise', label: 'المؤسسية' },
 ];
 
-const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  trial: { label: 'تجريبي', variant: 'secondary' },
-  active: { label: 'نشط', variant: 'default' },
-  pending_renewal: { label: 'في انتظار التجديد', variant: 'outline' },
-  expired: { label: 'منتهي', variant: 'destructive' },
-  cancelled: { label: 'ملغي', variant: 'destructive' },
+const statusConfig: Record<string, { label: string; bgColor: string; textColor: string; borderColor: string }> = {
+  trial: { 
+    label: 'تجريبي', 
+    bgColor: 'bg-blue-50', 
+    textColor: 'text-blue-700', 
+    borderColor: 'border-blue-200' 
+  },
+  active: { 
+    label: 'نشط', 
+    bgColor: 'bg-green-50', 
+    textColor: 'text-green-700', 
+    borderColor: 'border-green-200' 
+  },
+  pending_renewal: { 
+    label: 'في انتظار التجديد', 
+    bgColor: 'bg-yellow-50', 
+    textColor: 'text-yellow-700', 
+    borderColor: 'border-yellow-200' 
+  },
+  expired: { 
+    label: 'منتهي', 
+    bgColor: 'bg-red-50', 
+    textColor: 'text-red-700', 
+    borderColor: 'border-red-200' 
+  },
+  cancelled: { 
+    label: 'ملغي', 
+    bgColor: 'bg-gray-50', 
+    textColor: 'text-gray-700', 
+    borderColor: 'border-gray-200' 
+  },
+};
+
+const activeStatusConfig: Record<string, { label: string; bgColor: string; textColor: string }> = {
+  active: { label: 'نشط', bgColor: 'bg-green-100', textColor: 'text-green-800' },
+  inactive: { label: 'معطل', bgColor: 'bg-red-100', textColor: 'text-red-800' },
 };
 
 const ClientsPage = () => {
@@ -310,6 +342,27 @@ const ClientsPage = () => {
     } catch (error) {
       console.error('Error deleting organization:', error);
       toast.error('حدث خطأ أثناء الحذف');
+    }
+  };
+
+  const handleToggleOrgStatus = async (org: ClientOrganization) => {
+    const newStatus = !org.is_active;
+    const action = newStatus ? 'تفعيل' : 'تعطيل';
+    
+    if (!confirm(`هل أنت متأكد من ${action} ${org.name}؟`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('client_organizations')
+        .update({ is_active: newStatus })
+        .eq('id', org.id);
+
+      if (error) throw error;
+      toast.success(`تم ${action} المؤسسة بنجاح`);
+      fetchData();
+    } catch (error) {
+      console.error('Error toggling organization status:', error);
+      toast.error(`حدث خطأ أثناء ${action} المؤسسة`);
     }
   };
 
@@ -716,8 +769,14 @@ const ClientsPage = () => {
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <h3 className="font-semibold text-foreground">{org.name}</h3>
-                            <Badge variant={status?.variant}>{status?.label}</Badge>
-                            {!org.is_active && <Badge variant="destructive">معطل</Badge>}
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${status?.bgColor} ${status?.textColor} ${status?.borderColor}`}>
+                              {status?.label}
+                            </span>
+                            {!org.is_active && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-red-100 text-red-800 border-red-200">
+                                معطل
+                              </span>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                             <span className="flex items-center gap-1">
@@ -759,6 +818,21 @@ const ClientsPage = () => {
                           <DropdownMenuItem onClick={() => openEditOrg(org)}>
                             <Edit className="w-4 h-4 ml-2" />
                             تعديل
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleToggleOrgStatus(org)}
+                          >
+                            {org.is_active ? (
+                              <>
+                                <XCircle className="w-4 h-4 ml-2" />
+                                تعطيل المؤسسة
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="w-4 h-4 ml-2" />
+                                تفعيل المؤسسة
+                              </>
+                            )}
                           </DropdownMenuItem>
                           <DropdownMenuItem 
                             onClick={() => handleDeleteOrganization(org)}

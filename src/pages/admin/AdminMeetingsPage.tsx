@@ -90,6 +90,8 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.C
   rescheduled: { label: 'معاد جدولته', color: 'bg-blue-100 text-blue-800', icon: Calendar },
 };
 
+const allStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'rescheduled'] as const;
+
 export default function AdminMeetingsPage() {
   const { user } = useAuth();
   const [meetings, setMeetings] = useState<MeetingRequest[]>([]);
@@ -252,6 +254,34 @@ export default function AdminMeetingsPage() {
     } catch (error) {
       console.error('Error completing meeting:', error);
       toast.error('حدث خطأ');
+    }
+  };
+
+  const handleStatusChange = async (meeting: MeetingRequest, newStatus: string) => {
+    try {
+      const updateData: any = {
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      };
+
+      // Clear confirmed_date if changing back to pending
+      if (newStatus === 'pending') {
+        updateData.confirmed_date = null;
+        updateData.meeting_link = null;
+      }
+
+      const { error } = await supabase
+        .from('meeting_requests')
+        .update(updateData)
+        .eq('id', meeting.id);
+
+      if (error) throw error;
+
+      toast.success(`تم تغيير الحالة إلى ${statusConfig[newStatus]?.label}`);
+      fetchMeetings();
+    } catch (error) {
+      console.error('Error changing status:', error);
+      toast.error('حدث خطأ في تغيير الحالة');
     }
   };
 
@@ -617,7 +647,32 @@ export default function AdminMeetingsPage() {
                                     >
                                       تم الانتهاء
                                     </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleStatusChange(meeting, 'pending')}
+                                    >
+                                      إرجاع للانتظار
+                                    </Button>
                                   </>
+                                )}
+                                {meeting.status === 'completed' && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleStatusChange(meeting, 'confirmed')}
+                                  >
+                                    إرجاع لمؤكد
+                                  </Button>
+                                )}
+                                {meeting.status === 'cancelled' && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleStatusChange(meeting, 'pending')}
+                                  >
+                                    إعادة فتح
+                                  </Button>
                                 )}
                                 <Button
                                   size="sm"
