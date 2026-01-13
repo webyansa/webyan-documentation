@@ -5,14 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { Settings, Globe, Bell, Shield, Database, Save, Mail, Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Settings, Globe, Bell, Shield, Database, Save, Mail, Loader2, Upload, FileImage } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface SystemSettings {
   admin_email: string;
   company_name: string;
   support_response_time: string;
+  max_upload_size_mb: string;
+  allowed_file_types: string;
 }
 
 export default function SettingsPage() {
@@ -22,7 +26,16 @@ export default function SettingsPage() {
     admin_email: '',
     company_name: '',
     support_response_time: '48',
+    max_upload_size_mb: '1',
+    allowed_file_types: 'image/jpeg,image/png,image/gif,image/webp',
   });
+
+  const allFileTypes = [
+    { value: 'image/jpeg', label: 'JPEG' },
+    { value: 'image/png', label: 'PNG' },
+    { value: 'image/gif', label: 'GIF' },
+    { value: 'image/webp', label: 'WebP' },
+  ];
 
   const [generalSettings, setGeneralSettings] = useState({
     siteName: 'دليل استخدام ويبيان',
@@ -45,6 +58,8 @@ export default function SettingsPage() {
         admin_email: '',
         company_name: '',
         support_response_time: '48',
+        max_upload_size_mb: '1',
+        allowed_file_types: 'image/jpeg,image/png,image/gif,image/webp',
       };
 
       data?.forEach((item: { key: string; value: string }) => {
@@ -61,14 +76,13 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveEmailSettings = async () => {
+  const handleSaveSettings = async (keys: string[]) => {
     setIsSaving(true);
     try {
-      const updates = [
-        { key: 'admin_email', value: settings.admin_email },
-        { key: 'company_name', value: settings.company_name },
-        { key: 'support_response_time', value: settings.support_response_time },
-      ];
+      const updates = keys.map(key => ({
+        key,
+        value: (settings as any)[key] || '',
+      }));
 
       for (const update of updates) {
         const { error } = await supabase
@@ -76,10 +90,16 @@ export default function SettingsPage() {
           .update({ value: update.value })
           .eq('key', update.key);
 
-        if (error) throw error;
+        if (error) {
+          // If record doesn't exist, insert it
+          const { error: insertError } = await supabase
+            .from('system_settings')
+            .insert({ key: update.key, value: update.value });
+          if (insertError) throw insertError;
+        }
       }
 
-      toast.success('تم حفظ إعدادات البريد بنجاح');
+      toast.success('تم حفظ الإعدادات بنجاح');
     } catch (error: any) {
       console.error('Error saving settings:', error);
       toast.error('حدث خطأ أثناء حفظ الإعدادات');
@@ -183,9 +203,88 @@ export default function SettingsPage() {
             </ul>
           </div>
 
-          <Button onClick={handleSaveEmailSettings} disabled={isSaving} className="gap-2">
+          <Button onClick={() => handleSaveSettings(['admin_email', 'company_name', 'support_response_time'])} disabled={isSaving} className="gap-2">
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             حفظ إعدادات البريد
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* File Upload Settings */}
+      <Card className="border-orange-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5 text-orange-500" />
+            إعدادات رفع الملفات
+          </CardTitle>
+          <CardDescription>التحكم في حجم وأنواع الملفات المسموح برفعها</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="max-upload-size">الحد الأقصى لحجم الملف (ميجابايت)</Label>
+            <Select 
+              value={settings.max_upload_size_mb} 
+              onValueChange={(value) => setSettings({ ...settings, max_upload_size_mb: value })}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="اختر الحجم" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0.5">0.5 MB</SelectItem>
+                <SelectItem value="1">1 MB</SelectItem>
+                <SelectItem value="2">2 MB</SelectItem>
+                <SelectItem value="5">5 MB</SelectItem>
+                <SelectItem value="10">10 MB</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              الحد الأقصى المسموح به لحجم الصور المرفقة مع التذاكر
+            </p>
+          </div>
+          
+          <Separator />
+          
+          <div className="space-y-3">
+            <Label className="flex items-center gap-2">
+              <FileImage className="h-4 w-4" />
+              أنواع الصور المسموح بها
+            </Label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {allFileTypes.map((type) => (
+                <div key={type.value} className="flex items-center space-x-2 space-x-reverse">
+                  <Checkbox
+                    id={type.value}
+                    checked={settings.allowed_file_types.includes(type.value)}
+                    onCheckedChange={(checked) => {
+                      const types = settings.allowed_file_types.split(',').filter(Boolean);
+                      if (checked) {
+                        types.push(type.value);
+                      } else {
+                        const index = types.indexOf(type.value);
+                        if (index > -1) types.splice(index, 1);
+                      }
+                      setSettings({ ...settings, allowed_file_types: types.join(',') });
+                    }}
+                  />
+                  <Label htmlFor={type.value} className="cursor-pointer">{type.label}</Label>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              حدد أنواع الصور التي يمكن للعملاء رفعها مع التذاكر
+            </p>
+          </div>
+
+          <div className="bg-orange-50 dark:bg-orange-950/20 rounded-lg p-4 mt-4">
+            <h4 className="font-medium mb-2 text-orange-700 dark:text-orange-400">ملاحظة</h4>
+            <p className="text-sm text-orange-600 dark:text-orange-300">
+              يتم التحقق من حجم ونوع الملف قبل رفعه. الملفات التي لا تطابق هذه الإعدادات سيتم رفضها تلقائياً.
+            </p>
+          </div>
+
+          <Button onClick={() => handleSaveSettings(['max_upload_size_mb', 'allowed_file_types'])} disabled={isSaving} className="gap-2">
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            حفظ إعدادات الملفات
           </Button>
         </CardContent>
       </Card>

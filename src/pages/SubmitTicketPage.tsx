@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Send, Upload, X, CheckCircle, User, Mail, Globe, MessageSquare, AlertTriangle, HelpCircle, Bug, Lightbulb } from "lucide-react";
+import { Send, Upload, X, CheckCircle, User, Mail, Globe, MessageSquare, AlertTriangle, HelpCircle, Bug, Lightbulb, FileImage } from "lucide-react";
 import { DocsLayout } from "@/components/layout/DocsLayout";
 import { Breadcrumb } from "@/components/docs/Breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,10 @@ export default function SubmitTicketPage() {
   const [ticketNumber, setTicketNumber] = useState('');
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [uploadSettings, setUploadSettings] = useState({
+    maxSizeMB: 1,
+    allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+  });
   
   const [formData, setFormData] = useState({
     guestName: '',
@@ -46,9 +50,70 @@ export default function SubmitTicketPage() {
     priority: 'medium',
   });
 
+  // Fetch upload settings from database
+  useEffect(() => {
+    const fetchUploadSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('system_settings')
+          .select('key, value')
+          .in('key', ['max_upload_size_mb', 'allowed_file_types']);
+
+        if (error) throw error;
+
+        const settings = { maxSizeMB: 1, allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] };
+        data?.forEach((item: { key: string; value: string }) => {
+          if (item.key === 'max_upload_size_mb') {
+            settings.maxSizeMB = parseFloat(item.value) || 1;
+          } else if (item.key === 'allowed_file_types') {
+            settings.allowedTypes = item.value.split(',').filter(Boolean);
+          }
+        });
+        setUploadSettings(settings);
+      } catch (error) {
+        console.error('Error fetching upload settings:', error);
+      }
+    };
+
+    fetchUploadSettings();
+  }, []);
+
+  const validateFile = (file: File): { valid: boolean; error?: string } => {
+    // Check file size
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > uploadSettings.maxSizeMB) {
+      return { 
+        valid: false, 
+        error: `حجم الملف (${fileSizeMB.toFixed(2)} MB) يتجاوز الحد الأقصى المسموح (${uploadSettings.maxSizeMB} MB)` 
+      };
+    }
+
+    // Check file type
+    if (!uploadSettings.allowedTypes.includes(file.type)) {
+      const allowedExtensions = uploadSettings.allowedTypes.map(t => t.split('/')[1].toUpperCase()).join(', ');
+      return { 
+        valid: false, 
+        error: `نوع الملف غير مسموح. الأنواع المسموحة: ${allowedExtensions}` 
+      };
+    }
+
+    return { valid: true };
+  };
+
   const handleScreenshotChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const validation = validateFile(file);
+      if (!validation.valid) {
+        toast({
+          title: "خطأ في الملف",
+          description: validation.error,
+          variant: "destructive",
+        });
+        e.target.value = ''; // Reset file input
+        return;
+      }
+
       setScreenshot(file);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -371,7 +436,10 @@ export default function SubmitTicketPage() {
 
                 {/* Screenshot Upload */}
                 <div className="space-y-2">
-                  <Label>صورة توضيحية (اختياري)</Label>
+                  <Label className="flex items-center gap-2">
+                    <FileImage className="h-4 w-4" />
+                    صورة توضيحية (اختياري)
+                  </Label>
                   {screenshotPreview ? (
                     <div className="relative">
                       <img
@@ -396,11 +464,14 @@ export default function SubmitTicketPage() {
                         <p className="text-sm text-muted-foreground">
                           اضغط لرفع صورة أو اسحبها هنا
                         </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          الحد الأقصى: {uploadSettings.maxSizeMB} MB | الأنواع: {uploadSettings.allowedTypes.map(t => t.split('/')[1].toUpperCase()).join(', ')}
+                        </p>
                       </div>
                       <input
                         type="file"
                         className="hidden"
-                        accept="image/*"
+                        accept={uploadSettings.allowedTypes.join(',')}
                         onChange={handleScreenshotChange}
                       />
                     </label>
