@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Menu, X, LogOut, Settings, User } from "lucide-react";
+import { Search, Menu, X, LogOut, Settings, User, LayoutDashboard, Building2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NotificationDropdown } from "@/components/layout/NotificationDropdown";
 import webyanLogo from "@/assets/webyan-logo.svg";
+import { supabase } from "@/integrations/supabase/client";
 
 interface HeaderProps {
   onMenuToggle?: () => void;
@@ -15,6 +16,24 @@ interface HeaderProps {
 export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const { user, role, signOut, isAdmin, isAdminOrEditor } = useAuth();
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      checkIfClient();
+    }
+  }, [user]);
+
+  const checkIfClient = async () => {
+    const { data } = await supabase
+      .from('client_accounts')
+      .select('id')
+      .eq('user_id', user?.id)
+      .eq('is_active', true)
+      .maybeSingle();
+    
+    setIsClient(!!data);
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,6 +91,17 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
           {user ? (
             <>
               <NotificationDropdown />
+              
+              {/* Client Portal Link */}
+              {isClient && (
+                <Button variant="ghost" size="sm" asChild className="text-primary">
+                  <Link to="/portal" className="flex items-center gap-1">
+                    <Building2 className="h-4 w-4" />
+                    بوابة العملاء
+                  </Link>
+                </Button>
+              )}
+              
               {isAdminOrEditor && (
                 <Button variant="ghost" size="sm" asChild>
                   <Link to="/admin" className="flex items-center gap-1">

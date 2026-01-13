@@ -56,6 +56,7 @@ const navItems: NavItem[] = [
 
 const adminOnlyItems: NavItem[] = [
   { title: 'تذاكر الدعم', href: '/admin/tickets', icon: Ticket, requiredRole: 'admin' },
+  { title: 'إدارة العملاء', href: '/admin/clients', icon: Users, requiredRole: 'admin' },
   { title: 'التقييمات', href: '/admin/feedback', icon: MessageSquare, requiredRole: 'admin' },
   { title: 'البلاغات', href: '/admin/issues', icon: AlertTriangle, requiredRole: 'admin' },
   { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, requiredRole: 'admin' },
