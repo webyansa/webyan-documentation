@@ -46,26 +46,49 @@ interface NavItem {
   requiredRole?: 'admin' | 'editor';
 }
 
-const navItems: NavItem[] = [
-  { title: 'لوحة التحكم', href: '/admin', icon: LayoutDashboard },
-  { title: 'المقالات', href: '/admin/articles', icon: FileText },
-  { title: 'شجرة المحتوى', href: '/admin/content-tree', icon: FolderTree },
-  { title: 'الوسائط', href: '/admin/media', icon: Image },
-  { title: 'الوسوم', href: '/admin/tags', icon: Tags },
-  { title: 'سجل التحديثات', href: '/admin/changelog', icon: History },
-];
+interface NavSection {
+  title: string;
+  items: NavItem[];
+  adminOnly?: boolean;
+}
 
-const adminOnlyItems: NavItem[] = [
-  { title: 'تذاكر الدعم', href: '/admin/tickets', icon: Ticket, requiredRole: 'admin' },
-  { title: 'طلبات الاجتماعات', href: '/admin/meetings', icon: CalendarDays, requiredRole: 'admin' },
-  { title: 'إدارة العملاء', href: '/admin/clients', icon: Users, requiredRole: 'admin' },
-  { title: 'التقييمات', href: '/admin/feedback', icon: MessageSquare, requiredRole: 'admin' },
-  { title: 'البلاغات', href: '/admin/issues', icon: AlertTriangle, requiredRole: 'admin' },
-  { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, requiredRole: 'admin' },
-  { title: 'التقارير', href: '/admin/reports', icon: BarChart3, requiredRole: 'admin' },
-  { title: 'المستخدمين', href: '/admin/users', icon: Users, requiredRole: 'admin' },
-  { title: 'الإعدادات', href: '/admin/settings', icon: Settings, requiredRole: 'admin' },
-];
+// Content Section - Documentation related
+const contentSection: NavSection = {
+  title: 'المحتوى',
+  items: [
+    { title: 'لوحة التحكم', href: '/admin', icon: LayoutDashboard },
+    { title: 'المقالات', href: '/admin/articles', icon: FileText },
+    { title: 'شجرة المحتوى', href: '/admin/content-tree', icon: FolderTree },
+    { title: 'الوسائط', href: '/admin/media', icon: Image },
+    { title: 'الوسوم', href: '/admin/tags', icon: Tags },
+    { title: 'سجل التحديثات', href: '/admin/changelog', icon: History },
+  ]
+};
+
+// Clients Section - All client related features
+const clientsSection: NavSection = {
+  title: 'العملاء',
+  adminOnly: true,
+  items: [
+    { title: 'إدارة العملاء', href: '/admin/clients', icon: Users, requiredRole: 'admin' },
+    { title: 'تذاكر الدعم', href: '/admin/tickets', icon: Ticket, requiredRole: 'admin' },
+    { title: 'طلبات الاجتماعات', href: '/admin/meetings', icon: CalendarDays, requiredRole: 'admin' },
+    { title: 'التقييمات', href: '/admin/feedback', icon: MessageSquare, requiredRole: 'admin' },
+    { title: 'البلاغات', href: '/admin/issues', icon: AlertTriangle, requiredRole: 'admin' },
+  ]
+};
+
+// Management Section - System management
+const managementSection: NavSection = {
+  title: 'الإدارة',
+  adminOnly: true,
+  items: [
+    { title: 'التقارير', href: '/admin/reports', icon: BarChart3, requiredRole: 'admin' },
+    { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, requiredRole: 'admin' },
+    { title: 'المستخدمين', href: '/admin/users', icon: Users, requiredRole: 'admin' },
+    { title: 'الإعدادات', href: '/admin/settings', icon: Settings, requiredRole: 'admin' },
+  ]
+};
 
 export default function AdminLayout() {
   const location = useLocation();
@@ -120,9 +143,18 @@ export default function AdminLayout() {
     }
   };
 
-  const filteredAdminItems = adminOnlyItems.filter(
-    (item) => !item.requiredRole || (item.requiredRole === 'admin' && isAdmin)
-  );
+  const allSections = [contentSection, clientsSection, managementSection];
+  
+  const getFilteredSections = () => {
+    return allSections.map(section => ({
+      ...section,
+      items: section.items.filter(item => 
+        !item.requiredRole || (item.requiredRole === 'admin' && isAdmin)
+      )
+    })).filter(section => !section.adminOnly || isAdmin);
+  };
+  
+  const filteredSections = getFilteredSections();
 
   return (
     <div className="min-h-screen bg-muted/30" dir="rtl">
@@ -196,43 +228,15 @@ export default function AdminLayout() {
         )}
       >
         <ScrollArea className="h-full py-4">
-          <div className="px-3 py-2">
-            <h3 className="mb-2 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              المحتوى
-            </h3>
-            <nav className="space-y-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    location.pathname === item.href
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.title}
-                  {item.badge && (
-                    <span className="mr-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
-                </Link>
-              ))}
-            </nav>
-          </div>
-
-          {filteredAdminItems.length > 0 && (
-            <>
-              <Separator className="my-4" />
+          {filteredSections.map((section, index) => (
+            <div key={section.title}>
+              {index > 0 && <Separator className="my-4" />}
               <div className="px-3 py-2">
                 <h3 className="mb-2 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  الإدارة
+                  {section.title}
                 </h3>
                 <nav className="space-y-1">
-                  {filteredAdminItems.map((item) => (
+                  {section.items.map((item) => (
                     <Link
                       key={item.href}
                       to={item.href}
@@ -245,12 +249,17 @@ export default function AdminLayout() {
                     >
                       <item.icon className="h-4 w-4" />
                       {item.title}
+                      {item.badge && (
+                        <span className="mr-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
                     </Link>
                   ))}
                 </nav>
               </div>
-            </>
-          )}
+            </div>
+          ))}
         </ScrollArea>
       </aside>
 
