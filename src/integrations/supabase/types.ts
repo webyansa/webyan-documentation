@@ -1017,6 +1017,8 @@ export type Database = {
           resolved_at: string | null
           resolved_by: string | null
           screenshot_url: string | null
+          source: string | null
+          source_domain: string | null
           staff_status: string | null
           status: string
           subject: string
@@ -1044,6 +1046,8 @@ export type Database = {
           resolved_at?: string | null
           resolved_by?: string | null
           screenshot_url?: string | null
+          source?: string | null
+          source_domain?: string | null
           staff_status?: string | null
           status?: string
           subject: string
@@ -1071,6 +1075,8 @@ export type Database = {
           resolved_at?: string | null
           resolved_by?: string | null
           screenshot_url?: string | null
+          source?: string | null
+          source_domain?: string | null
           staff_status?: string | null
           status?: string
           subject?: string

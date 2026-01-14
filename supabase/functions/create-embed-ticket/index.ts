@@ -33,6 +33,9 @@ serve(async (req) => {
 
     const body: EmbedTicketRequest = await req.json();
     const origin = req.headers.get('x-embed-origin') || req.headers.get('origin') || '';
+    
+    // Extract source domain
+    const sourceDomain = origin.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
 
     // Validate required fields
     if (!body.token || !body.subject || !body.description) {
@@ -45,7 +48,17 @@ serve(async (req) => {
     // Verify token and get organization details
     const { data: embedToken, error: tokenError } = await supabase
       .from('embed_tokens')
-      .select('*, organization:client_organizations(id, name, contact_email, website_url, logo_url)')
+      .select(`
+        *,
+        organization:client_organizations(
+          id, 
+          name, 
+          contact_email, 
+          contact_phone,
+          website_url, 
+          logo_url
+        )
+      `)
       .eq('token', body.token)
       .eq('is_active', true)
       .single();
@@ -53,7 +66,11 @@ serve(async (req) => {
     if (tokenError || !embedToken) {
       console.log('Invalid token:', body.token);
       return new Response(
-        JSON.stringify({ success: false, error: 'Invalid or inactive token' }),
+        JSON.stringify({ 
+          success: false, 
+          error: 'Invalid or inactive token',
+          code: 'INVALID_TOKEN'
+        }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -61,35 +78,42 @@ serve(async (req) => {
     // Check expiration
     if (embedToken.expires_at && new Date(embedToken.expires_at) < new Date()) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Token has expired' }),
+        JSON.stringify({ 
+          success: false, 
+          error: 'Token has expired',
+          code: 'TOKEN_EXPIRED'
+        }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Check allowed domains
+    // Check allowed domains (only if domains are specified)
     if (embedToken.allowed_domains && embedToken.allowed_domains.length > 0) {
-      const originDomain = origin.replace(/^https?:\/\//, '').split('/')[0];
       const isAllowed = embedToken.allowed_domains.some((domain: string) => {
         if (domain.startsWith('*.')) {
           const baseDomain = domain.slice(2);
-          return originDomain === baseDomain || originDomain.endsWith('.' + baseDomain);
+          return sourceDomain === baseDomain || sourceDomain.endsWith('.' + baseDomain);
         }
-        return domain === originDomain || domain === origin;
+        return domain === sourceDomain || domain === origin;
       });
 
       if (!isAllowed) {
-        console.log('Origin not allowed:', origin);
+        console.log('Origin not allowed:', origin, 'Allowed:', embedToken.allowed_domains);
         return new Response(
-          JSON.stringify({ success: false, error: 'Origin not allowed for this token' }),
+          JSON.stringify({ 
+            success: false, 
+            error: 'Origin not allowed for this token',
+            code: 'DOMAIN_NOT_ALLOWED'
+          }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }
 
-    // Generate ticket number
+    // Generate ticket number with EMB prefix to identify embed source
     const ticketNumber = 'EMB-' + Math.floor(100000 + Math.random() * 900000);
 
-    // Create the ticket linked to the organization
+    // Create the ticket linked to the organization with full tracking
     const { data: ticket, error: ticketError } = await supabase
       .from('support_tickets')
       .insert({
@@ -98,12 +122,21 @@ serve(async (req) => {
         description: body.description.slice(0, 5000),
         category: body.category || 'technical',
         priority: body.priority || 'medium',
+        // Client identity from embed token (not from user input)
+        organization_id: embedToken.organization_id,
+        // Contact info - prefer user input, fallback to organization data
         guest_name: body.contactName?.slice(0, 100) || embedToken.organization?.name || 'عميل مضمن',
         guest_email: body.contactEmail?.slice(0, 255) || embedToken.organization?.contact_email || null,
         website_url: body.websiteUrl?.slice(0, 500) || embedToken.organization?.website_url || null,
+        // Source tracking
+        source: 'embed',
+        source_domain: sourceDomain || null,
+        // Status and admin note
         status: 'open',
-        organization_id: embedToken.organization_id,
-        admin_note: `تذكرة من نموذج مضمن - العميل: ${embedToken.organization?.name || 'غير معروف'}`
+        admin_note: `📥 تذكرة من نموذج مضمن
+العميل: ${embedToken.organization?.name || 'غير معروف'}
+النطاق: ${sourceDomain || 'غير محدد'}
+رمز التضمين: ${embedToken.name}`
       })
       .select()
       .single();
@@ -116,7 +149,7 @@ serve(async (req) => {
       );
     }
 
-    // Update token usage
+    // Update token usage statistics
     await supabase
       .from('embed_tokens')
       .update({
@@ -125,13 +158,16 @@ serve(async (req) => {
       })
       .eq('id', embedToken.id);
 
-    console.log('Embed ticket created:', ticketNumber, 'for organization:', embedToken.organization_id);
+    console.log('Embed ticket created:', ticketNumber, 
+      'Organization:', embedToken.organization?.name, 
+      'Domain:', sourceDomain);
 
     return new Response(
       JSON.stringify({
         success: true,
         ticketNumber: ticket.ticket_number,
         ticketId: ticket.id,
+        organizationName: embedToken.organization?.name,
         message: 'تم إنشاء التذكرة بنجاح'
       }),
       { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
