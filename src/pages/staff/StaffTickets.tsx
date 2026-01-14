@@ -225,7 +225,44 @@ export default function StaffTickets() {
 
       if (error) throw error;
 
-      toast.success('تم إغلاق التذكرة بنجاح');
+      // Send notification to client
+      if (selectedTicket.user_id) {
+        await supabase.from('user_notifications').insert({
+          user_id: selectedTicket.user_id,
+          title: '✅ تم حل تذكرتك',
+          message: `تم حل التذكرة "${selectedTicket.subject}" بنجاح`,
+          type: 'ticket_resolved',
+        });
+      }
+
+      // Send email notification to client
+      const clientEmail = selectedTicket.guest_email || null;
+      if (clientEmail || selectedTicket.user_id) {
+        let emailToSend = clientEmail;
+        if (!emailToSend && selectedTicket.user_id) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('id', selectedTicket.user_id)
+            .single();
+          emailToSend = profile?.email || null;
+        }
+
+        if (emailToSend) {
+          await supabase.functions.invoke('send-ticket-notification', {
+            body: {
+              email: emailToSend,
+              ticketNumber: selectedTicket.ticket_number,
+              subject: selectedTicket.subject,
+              type: 'resolved',
+              message: closureReport,
+              siteUrl: window.location.origin,
+            },
+          });
+        }
+      }
+
+      toast.success('تم إغلاق التذكرة بنجاح وإرسال إشعار للعميل');
       setCloseDialogOpen(false);
       setClosureReport('');
       fetchTickets();

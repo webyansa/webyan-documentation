@@ -37,6 +37,10 @@ interface SupportTicket {
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
+  staff?: {
+    full_name: string;
+    email: string;
+  } | null;
 }
 
 interface TicketReply {
@@ -112,13 +116,29 @@ export default function AdminTicketsPage() {
 
   const fetchTickets = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: ticketsData, error } = await supabase
         .from('support_tickets')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTickets((data as unknown as SupportTicket[]) || []);
+      
+      // Fetch staff names for assigned tickets
+      const ticketsWithStaff = await Promise.all(
+        (ticketsData || []).map(async (ticket: any) => {
+          if (ticket.assigned_to_staff) {
+            const { data: staffData } = await supabase
+              .from('staff_members')
+              .select('full_name, email')
+              .eq('id', ticket.assigned_to_staff)
+              .single();
+            return { ...ticket, staff: staffData };
+          }
+          return { ...ticket, staff: null };
+        })
+      );
+      
+      setTickets(ticketsWithStaff as unknown as SupportTicket[]);
     } catch (error) {
       console.error('Error fetching tickets:', error);
     } finally {
@@ -374,24 +394,40 @@ export default function AdminTicketsPage() {
         // Get staff user_id
         const { data: staffData } = await supabase
           .from('staff_members' as any)
-          .select('user_id')
+          .select('user_id, email')
           .eq('id', selectedStaffId)
           .single();
 
-        const staffUserId = (staffData as any)?.user_id;
-        if (staffUserId) {
+        const staffRecord = staffData as any;
+        if (staffRecord?.user_id) {
           await supabase.from('user_notifications').insert({
-            user_id: staffUserId,
-            title: 'تذكرة جديدة موجهة إليك',
+            user_id: staffRecord.user_id,
+            title: '🎫 تذكرة جديدة موجهة إليك',
             message: `تم توجيه التذكرة "${ticketToAssign.subject}" إليك${adminNote ? ` - ملاحظة: ${adminNote}` : ''}`,
             type: 'ticket_assigned',
+          });
+        }
+
+        // Send email notification to staff
+        if (staffRecord?.email) {
+          await supabase.functions.invoke('send-staff-notification', {
+            body: {
+              type: 'ticket_assigned',
+              staff_email: staffRecord.email,
+              staff_name: staff.full_name,
+              data: {
+                ticket_number: ticketToAssign.ticket_number,
+                ticket_subject: ticketToAssign.subject,
+                admin_note: adminNote,
+              },
+            },
           });
         }
       }
 
       toast({
         title: "تم التوجيه",
-        description: "تم توجيه التذكرة للموظف بنجاح",
+        description: "تم توجيه التذكرة للموظف بنجاح وإرسال إشعار له",
       });
 
       setAssignDialogOpen(false);
@@ -542,10 +578,10 @@ export default function AdminTicketsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>رقم التذكرة</TableHead>
+              <TableHead>رقم التذكرة</TableHead>
                 <TableHead>المرسل</TableHead>
                 <TableHead>الموضوع</TableHead>
-                <TableHead>النوع</TableHead>
+                <TableHead>الموظف المسؤول</TableHead>
                 <TableHead>الأولوية</TableHead>
                 <TableHead>الحالة</TableHead>
                 <TableHead>التاريخ</TableHead>
@@ -586,7 +622,18 @@ export default function AdminTicketsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate">{ticket.subject}</TableCell>
-                      <TableCell>{categoryLabels[ticket.category] || ticket.category}</TableCell>
+                      <TableCell>
+                        {ticket.staff ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                              <User className="h-3 w-3 text-primary" />
+                            </div>
+                            <span className="text-sm">{ticket.staff.full_name}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">غير موجه</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={priority.color}>
                           {priority.label}

@@ -386,6 +386,42 @@ export default function AdminMeetingsPage() {
 
       if (error) throw error;
 
+      // Get staff details for notification
+      const staff = staffMembers.find(s => s.id === selectedStaffId);
+      if (staff) {
+        // Get staff user_id for in-app notification
+        const { data: staffData } = await supabase
+          .from('staff_members')
+          .select('user_id')
+          .eq('id', selectedStaffId)
+          .single();
+
+        const staffUserId = staffData?.user_id;
+        if (staffUserId) {
+          await supabase.from('user_notifications').insert({
+            user_id: staffUserId,
+            title: '📅 اجتماع جديد موجه إليك',
+            message: `تم توجيه اجتماع "${meetingToAssign.subject}" إليك${staffNote ? ` - ملاحظة: ${staffNote}` : ''}`,
+            type: 'meeting_assigned',
+          });
+        }
+
+        // Send email notification
+        await supabase.functions.invoke('send-staff-notification', {
+          body: {
+            type: 'meeting_assigned',
+            staff_email: staff.email,
+            staff_name: staff.full_name,
+            data: {
+              meeting_subject: meetingToAssign.subject,
+              meeting_date: meetingToAssign.preferred_date ? format(parseISO(meetingToAssign.preferred_date), 'EEEE d MMMM yyyy - HH:mm', { locale: ar }) : undefined,
+              organization_name: meetingToAssign.organization?.name,
+              admin_note: staffNote,
+            },
+          },
+        });
+      }
+
       toast.success('تم توجيه الاجتماع للموظف بنجاح');
       setAssignDialogOpen(false);
       setMeetingToAssign(null);
@@ -615,7 +651,7 @@ export default function AdminMeetingsPage() {
                       <TableHead>الموضوع</TableHead>
                       <TableHead>نوع الاجتماع</TableHead>
                       <TableHead>الموعد المطلوب</TableHead>
-                      <TableHead>المدة</TableHead>
+                      <TableHead>الموظف المسؤول</TableHead>
                       <TableHead>الحالة</TableHead>
                       <TableHead className="text-center">الإجراءات</TableHead>
                     </TableRow>
@@ -623,7 +659,7 @@ export default function AdminMeetingsPage() {
                   <TableBody>
                     {filteredMeetings.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                           <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
                           <p>لا توجد طلبات اجتماعات</p>
                         </TableCell>
@@ -678,10 +714,24 @@ export default function AdminMeetingsPage() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline" className="gap-1">
-                                <Clock className="h-3 w-3" />
-                                {meeting.duration_minutes} دقيقة
-                              </Badge>
+                              {meeting.staff ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <User className="h-3.5 w-3.5 text-primary" />
+                                  </div>
+                                  <span className="text-sm font-medium">{meeting.staff.full_name}</span>
+                                </div>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-1 text-xs"
+                                  onClick={() => handleOpenAssignDialog(meeting)}
+                                >
+                                  <UserPlus className="h-3 w-3" />
+                                  توجيه
+                                </Button>
+                              )}
                             </TableCell>
                             <TableCell>
                               <Badge className={statusConfig[meeting.status]?.color || 'bg-gray-100'}>
@@ -952,6 +1002,75 @@ export default function AdminMeetingsPage() {
                 رفض الطلب
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Staff Assignment Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-primary" />
+              توجيه الاجتماع لموظف
+            </DialogTitle>
+            <DialogDescription>
+              {meetingToAssign?.subject}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {meetingToAssign && (
+              <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <span>{meetingToAssign.organization?.name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span>{format(parseISO(meetingToAssign.preferred_date), 'dd/MM/yyyy HH:mm', { locale: ar })}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>اختر الموظف *</Label>
+              <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر موظف..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {staffMembers.map((staff) => (
+                    <SelectItem key={staff.id} value={staff.id}>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4" />
+                        {staff.full_name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>ملاحظة للموظف (اختياري)</Label>
+              <Textarea
+                value={staffNote}
+                onChange={(e) => setStaffNote(e.target.value)}
+                placeholder="أضف ملاحظة أو تعليمات للموظف..."
+                className="min-h-[80px]"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleAssignMeeting} disabled={!selectedStaffId || assigning}>
+              <Send className="h-4 w-4 ml-2" />
+              {assigning ? 'جاري التوجيه...' : 'توجيه الاجتماع'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
