@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   AlertCircle,
   MessageSquare,
-  ArrowLeft
+  ArrowLeft,
+  Building2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ interface SupportTicket {
   status: string;
   priority: string;
   category: string;
+  source: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -62,20 +64,55 @@ const PortalTickets = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
-      fetchTickets();
-      setupRealtimeSubscription();
+      fetchClientOrganization();
     }
   }, [user]);
 
-  const fetchTickets = async () => {
+  useEffect(() => {
+    if (organizationId) {
+      fetchTickets();
+      setupRealtimeSubscription();
+    }
+  }, [organizationId]);
+
+  const fetchClientOrganization = async () => {
     try {
+      // Get client account to find organization_id
+      const { data: clientAccount, error } = await supabase
+        .from('client_accounts')
+        .select('organization_id')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching client account:', error);
+        setLoading(false);
+        return;
+      }
+
+      setOrganizationId(clientAccount?.organization_id || null);
+    } catch (error) {
+      console.error('Error:', error);
+      setLoading(false);
+    }
+  };
+
+  const fetchTickets = async () => {
+    if (!organizationId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Fetch tickets by organization_id (includes both direct and embed tickets)
       const { data, error } = await supabase
         .from('support_tickets')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('organization_id', organizationId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -88,6 +125,8 @@ const PortalTickets = () => {
   };
 
   const setupRealtimeSubscription = () => {
+    if (!organizationId) return;
+    
     const channel = supabase
       .channel('portal-tickets')
       .on(
@@ -96,7 +135,7 @@ const PortalTickets = () => {
           event: '*',
           schema: 'public',
           table: 'support_tickets',
-          filter: `user_id=eq.${user?.id}`
+          filter: `organization_id=eq.${organizationId}`
         },
         () => {
           fetchTickets();

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -20,7 +20,10 @@ import {
   Minimize2,
   Maximize2,
   MessageCircle,
-  Headphones
+  Headphones,
+  Upload,
+  Image as ImageIcon,
+  Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +54,9 @@ const priorities = [
   { value: 'urgent', label: 'عاجلة', icon: Flame, color: 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100', description: 'توقف كامل' },
 ];
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
 const EmbedTicketPage = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -66,6 +72,10 @@ const EmbedTicketPage = () => {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [isMinimized, setIsMinimized] = useState(mode === 'widget');
   const [step, setStep] = useState(1);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({
     subject: '',
@@ -74,7 +84,8 @@ const EmbedTicketPage = () => {
     priority: 'medium',
     contactName: '',
     contactEmail: '',
-    websiteUrl: ''
+    websiteUrl: '',
+    screenshotUrl: ''
   });
 
   useEffect(() => {
@@ -124,11 +135,86 @@ const EmbedTicketPage = () => {
       }
 
       setOrganization(data.organization);
+      
+      // Auto-fill email from organization data
+      if (data.organization?.contact_email) {
+        setFormData(prev => ({
+          ...prev,
+          contactEmail: data.organization.contact_email
+        }));
+      }
+      
       setLoading(false);
     } catch (err) {
       console.error('Token verification error:', err);
       setError('حدث خطأ في التحقق من الرمز');
       setLoading(false);
+    }
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      toast.error('نوع الملف غير مدعوم. الأنواع المسموحة: JPG, PNG, GIF, WebP');
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('حجم الملف كبير جداً. الحد الأقصى 5 ميجابايت');
+      return;
+    }
+
+    setSelectedImage(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const uploadImage = async (): Promise<string | null> => {
+    if (!selectedImage) return null;
+
+    setUploadingImage(true);
+    try {
+      const fileExt = selectedImage.name.split('.').pop();
+      const fileName = `embed-tickets/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('ticket-attachments')
+        .upload(fileName, selectedImage, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) {
+        console.error('Upload error:', error);
+        toast.error('فشل رفع الصورة');
+        return null;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('ticket-attachments')
+        .getPublicUrl(fileName);
+
+      return urlData.publicUrl;
+    } catch (err) {
+      console.error('Upload error:', err);
+      return null;
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -143,10 +229,17 @@ const EmbedTicketPage = () => {
     setSubmitting(true);
 
     try {
+      // Upload image if selected
+      let screenshotUrl = null;
+      if (selectedImage) {
+        screenshotUrl = await uploadImage();
+      }
+
       const { data, error } = await supabase.functions.invoke('create-embed-ticket', {
         body: {
           token,
-          ...formData
+          ...formData,
+          screenshotUrl
         },
         headers: {
           'x-embed-origin': window.location.origin
@@ -177,14 +270,17 @@ const EmbedTicketPage = () => {
     setSubmitted(false);
     setTicketNumber('');
     setStep(1);
+    setSelectedImage(null);
+    setImagePreview(null);
     setFormData({
       subject: '',
       description: '',
       category: 'technical',
       priority: 'medium',
       contactName: '',
-      contactEmail: '',
-      websiteUrl: ''
+      contactEmail: organization?.contact_email || '',
+      websiteUrl: '',
+      screenshotUrl: ''
     });
   };
 
@@ -651,6 +747,68 @@ const EmbedTicketPage = () => {
                   theme === 'dark' ? 'bg-slate-900 border-slate-600' : 'border-slate-200'
                 )}
               />
+            </div>
+
+            {/* Screenshot Upload */}
+            <div className="space-y-2">
+              <Label className={theme === 'dark' ? 'text-white' : 'text-gray-700'}>
+                إرفاق صورة (اختياري)
+              </Label>
+              <div className={cn(
+                "border-2 border-dashed rounded-xl p-4 transition-all",
+                theme === 'dark' ? 'border-slate-600 hover:border-slate-500' : 'border-slate-200 hover:border-slate-300',
+                imagePreview && 'border-primary/50'
+              )}>
+                {imagePreview ? (
+                  <div className="relative">
+                    <img 
+                      src={imagePreview} 
+                      alt="معاينة الصورة" 
+                      className="max-h-48 mx-auto rounded-lg object-contain"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 left-2 h-8 w-8"
+                      onClick={removeImage}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center cursor-pointer py-4">
+                    <div className={cn(
+                      "w-12 h-12 rounded-full flex items-center justify-center mb-3",
+                      theme === 'dark' ? 'bg-slate-700' : 'bg-slate-100'
+                    )}>
+                      <Upload className={cn(
+                        "w-6 h-6",
+                        theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
+                      )} />
+                    </div>
+                    <span className={cn(
+                      "text-sm font-medium",
+                      theme === 'dark' ? 'text-slate-300' : 'text-slate-700'
+                    )}>
+                      اضغط لرفع صورة
+                    </span>
+                    <span className={cn(
+                      "text-xs mt-1",
+                      theme === 'dark' ? 'text-slate-500' : 'text-slate-400'
+                    )}>
+                      PNG, JPG, GIF - حد أقصى 5MB
+                    </span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      onChange={handleImageSelect}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
             </div>
           </div>
 

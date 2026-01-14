@@ -17,6 +17,7 @@ interface EmbedTicketRequest {
   contactEmail?: string;
   contactPhone?: string;
   websiteUrl?: string;
+  screenshotUrl?: string;
 }
 
 serve(async (req) => {
@@ -128,6 +129,7 @@ serve(async (req) => {
         guest_name: body.contactName?.slice(0, 100) || embedToken.organization?.name || 'عميل مضمن',
         guest_email: body.contactEmail?.slice(0, 255) || embedToken.organization?.contact_email || null,
         website_url: body.websiteUrl?.slice(0, 500) || embedToken.organization?.website_url || null,
+        screenshot_url: body.screenshotUrl || null,
         // Source tracking
         source: 'embed',
         source_domain: sourceDomain || null,
@@ -136,7 +138,7 @@ serve(async (req) => {
         admin_note: `📥 تذكرة من نموذج مضمن
 العميل: ${embedToken.organization?.name || 'غير معروف'}
 النطاق: ${sourceDomain || 'غير محدد'}
-رمز التضمين: ${embedToken.name}`
+رمز التضمين: ${embedToken.name}${body.screenshotUrl ? '\n📎 يوجد صورة مرفقة' : ''}`
       })
       .select()
       .single();
