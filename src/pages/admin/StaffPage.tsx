@@ -67,6 +67,7 @@ interface StaffMember {
 const defaultFormData = {
   full_name: '',
   email: '',
+  password: '',
   phone: '',
   job_title: '',
   is_active: true,
@@ -112,6 +113,7 @@ export default function StaffPage() {
       setFormData({
         full_name: member.full_name,
         email: member.email,
+        password: '', // Empty for edit mode
         phone: member.phone || '',
         job_title: member.job_title || '',
         is_active: member.is_active,
@@ -132,11 +134,22 @@ export default function StaffPage() {
       return;
     }
 
+    // Password required only for new staff
+    if (!selectedStaff && !formData.password) {
+      toast.error('يرجى إدخال كلمة المرور');
+      return;
+    }
+
+    if (!selectedStaff && formData.password.length < 6) {
+      toast.error('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+
     setSaving(true);
 
     try {
       if (selectedStaff) {
-        // Update
+        // Update existing staff
         const { error } = await supabase
           .from('staff_members' as any)
           .update({
@@ -154,33 +167,32 @@ export default function StaffPage() {
         if (error) throw error;
         toast.success('تم تحديث بيانات الموظف');
       } else {
-        // Create
-        const { error } = await supabase
-          .from('staff_members' as any)
-          .insert({
+        // Create new staff with user account via edge function
+        const { data, error } = await supabase.functions.invoke('create-staff-account', {
+          body: {
             full_name: formData.full_name,
             email: formData.email,
+            password: formData.password,
             phone: formData.phone || null,
             job_title: formData.job_title || null,
             is_active: formData.is_active,
             can_reply_tickets: formData.can_reply_tickets,
             can_manage_content: formData.can_manage_content,
             can_attend_meetings: formData.can_attend_meetings
-          } as any);
+          }
+        });
 
         if (error) throw error;
-        toast.success('تم إضافة الموظف بنجاح');
+        if (data?.error) throw new Error(data.error);
+        
+        toast.success(data?.message || 'تم إضافة الموظف بنجاح');
       }
 
       setDialogOpen(false);
       fetchStaff();
     } catch (error: any) {
       console.error('Error saving staff:', error);
-      if (error.code === '23505') {
-        toast.error('البريد الإلكتروني مسجل مسبقاً');
-      } else {
-        toast.error('حدث خطأ أثناء الحفظ');
-      }
+      toast.error(error.message || 'حدث خطأ أثناء الحفظ');
     } finally {
       setSaving(false);
     }
@@ -446,8 +458,24 @@ export default function StaffPage() {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="ahmed@example.com"
+                disabled={!!selectedStaff}
               />
             </div>
+
+            {!selectedStaff && (
+              <div className="space-y-2">
+                <Label>كلمة المرور *</Label>
+                <Input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="أدخل كلمة مرور قوية (6 أحرف على الأقل)"
+                />
+                <p className="text-xs text-muted-foreground">
+                  سيتم إرسال بيانات الدخول للموظف عبر البريد الإلكتروني
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

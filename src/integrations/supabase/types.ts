@@ -602,6 +602,8 @@ export type Database = {
         Row: {
           admin_notes: string | null
           alternative_date: string | null
+          assigned_staff: string | null
+          closure_report: string | null
           confirmed_date: string | null
           created_at: string
           description: string | null
@@ -619,6 +621,8 @@ export type Database = {
         Insert: {
           admin_notes?: string | null
           alternative_date?: string | null
+          assigned_staff?: string | null
+          closure_report?: string | null
           confirmed_date?: string | null
           created_at?: string
           description?: string | null
@@ -636,6 +640,8 @@ export type Database = {
         Update: {
           admin_notes?: string | null
           alternative_date?: string | null
+          assigned_staff?: string | null
+          closure_report?: string | null
           confirmed_date?: string | null
           created_at?: string
           description?: string | null
@@ -651,6 +657,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "meeting_requests_assigned_staff_fkey"
+            columns: ["assigned_staff"]
+            isOneToOne: false
+            referencedRelation: "staff_members"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "meeting_requests_organization_id_fkey"
             columns: ["organization_id"]
@@ -684,6 +697,57 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      staff_members: {
+        Row: {
+          assigned_tickets_count: number | null
+          can_attend_meetings: boolean
+          can_manage_content: boolean
+          can_reply_tickets: boolean
+          completed_meetings_count: number | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean
+          job_title: string | null
+          phone: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          assigned_tickets_count?: number | null
+          can_attend_meetings?: boolean
+          can_manage_content?: boolean
+          can_reply_tickets?: boolean
+          completed_meetings_count?: number | null
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          is_active?: boolean
+          job_title?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          assigned_tickets_count?: number | null
+          can_attend_meetings?: boolean
+          can_manage_content?: boolean
+          can_reply_tickets?: boolean
+          completed_meetings_count?: number | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          job_title?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -745,8 +809,11 @@ export type Database = {
       }
       support_tickets: {
         Row: {
+          admin_note: string | null
           assigned_to: string | null
+          assigned_to_staff: string | null
           category: string
+          closure_report: string | null
           created_at: string
           description: string
           guest_email: string | null
@@ -764,8 +831,11 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          admin_note?: string | null
           assigned_to?: string | null
+          assigned_to_staff?: string | null
           category?: string
+          closure_report?: string | null
           created_at?: string
           description: string
           guest_email?: string | null
@@ -783,8 +853,11 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          admin_note?: string | null
           assigned_to?: string | null
+          assigned_to_staff?: string | null
           category?: string
+          closure_report?: string | null
           created_at?: string
           description?: string
           guest_email?: string | null
@@ -801,7 +874,15 @@ export type Database = {
           user_id?: string | null
           website_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_assigned_to_staff_fkey"
+            columns: ["assigned_to_staff"]
+            isOneToOne: false
+            referencedRelation: "staff_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       system_settings: {
         Row: {
@@ -936,6 +1017,15 @@ export type Database = {
     }
     Functions: {
       get_client_organization: { Args: { _user_id: string }; Returns: string }
+      get_staff_permissions: {
+        Args: { _user_id: string }
+        Returns: {
+          can_attend_meetings: boolean
+          can_manage_content: boolean
+          can_reply_tickets: boolean
+          staff_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -946,6 +1036,7 @@ export type Database = {
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_admin_or_editor: { Args: { _user_id: string }; Returns: boolean }
       is_client: { Args: { _user_id: string }; Returns: boolean }
+      is_staff: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "editor" | "viewer"

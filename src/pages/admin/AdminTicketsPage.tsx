@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Ticket, Clock, CheckCircle, AlertCircle, Search, Filter, Eye, MessageSquare, User } from "lucide-react";
+import { Ticket, Clock, CheckCircle, AlertCircle, Search, Filter, Eye, MessageSquare, User, UserPlus, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,6 +31,9 @@ interface SupportTicket {
   priority: string;
   status: string;
   assigned_to: string | null;
+  assigned_to_staff: string | null;
+  admin_note: string | null;
+  closure_report: string | null;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
@@ -41,6 +44,14 @@ interface TicketReply {
   message: string;
   is_staff_reply: boolean;
   created_at: string;
+}
+
+interface StaffMember {
+  id: string;
+  full_name: string;
+  job_title: string | null;
+  can_reply_tickets: boolean;
+  is_active: boolean;
 }
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
@@ -81,12 +92,21 @@ export default function AdminTicketsPage() {
   const [newReply, setNewReply] = useState('');
   const [sending, setSending] = useState(false);
 
+  // Assign dialog
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [ticketToAssign, setTicketToAssign] = useState<SupportTicket | null>(null);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('');
+  const [adminNote, setAdminNote] = useState('');
+  const [assigning, setAssigning] = useState(false);
+
   useEffect(() => {
     if (!isAdminOrEditor) {
       navigate('/');
       return;
     }
     fetchTickets();
+    fetchStaffMembers();
     setupRealtimeSubscription();
   }, [isAdminOrEditor, navigate]);
 
@@ -98,11 +118,26 @@ export default function AdminTicketsPage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTickets(data || []);
+      setTickets((data as unknown as SupportTicket[]) || []);
     } catch (error) {
       console.error('Error fetching tickets:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStaffMembers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('staff_members' as any)
+        .select('id, full_name, job_title, can_reply_tickets, is_active')
+        .eq('is_active', true)
+        .eq('can_reply_tickets', true);
+
+      if (error) throw error;
+      setStaffMembers((data as unknown as StaffMember[]) || []);
+    } catch (error) {
+      console.error('Error fetching staff:', error);
     }
   };
 
@@ -300,6 +335,76 @@ export default function AdminTicketsPage() {
       });
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleOpenAssignDialog = (ticket: SupportTicket) => {
+    setTicketToAssign(ticket);
+    setSelectedStaffId(ticket.assigned_to_staff || '');
+    setAdminNote(ticket.admin_note || '');
+    setAssignDialogOpen(true);
+  };
+
+  const handleAssignTicket = async () => {
+    if (!ticketToAssign || !selectedStaffId) {
+      toast({
+        title: "خطأ",
+        description: "يرجى اختيار موظف",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAssigning(true);
+    try {
+      const { error } = await supabase
+        .from('support_tickets')
+        .update({
+          assigned_to_staff: selectedStaffId,
+          admin_note: adminNote || null,
+          status: ticketToAssign.status === 'open' ? 'in_progress' : ticketToAssign.status
+        } as any)
+        .eq('id', ticketToAssign.id);
+
+      if (error) throw error;
+
+      // Create notification for the staff member
+      const staff = staffMembers.find(s => s.id === selectedStaffId);
+      if (staff) {
+        // Get staff user_id
+        const { data: staffData } = await supabase
+          .from('staff_members' as any)
+          .select('user_id')
+          .eq('id', selectedStaffId)
+          .single();
+
+        const staffUserId = (staffData as any)?.user_id;
+        if (staffUserId) {
+          await supabase.from('user_notifications').insert({
+            user_id: staffUserId,
+            title: 'تذكرة جديدة موجهة إليك',
+            message: `تم توجيه التذكرة "${ticketToAssign.subject}" إليك${adminNote ? ` - ملاحظة: ${adminNote}` : ''}`,
+            type: 'ticket_assigned',
+          });
+        }
+      }
+
+      toast({
+        title: "تم التوجيه",
+        description: "تم توجيه التذكرة للموظف بنجاح",
+      });
+
+      setAssignDialogOpen(false);
+      fetchTickets();
+    } catch (error: any) {
+      console.error('Error assigning ticket:', error);
+      toast({
+        title: "خطأ",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -508,14 +613,24 @@ export default function AdminTicketsPage() {
                         {format(new Date(ticket.created_at), 'dd/MM/yyyy', { locale: ar })}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewTicket(ticket)}
-                        >
-                          <Eye className="h-4 w-4 ml-1" />
-                          عرض
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleViewTicket(ticket)}
+                          >
+                            <Eye className="h-4 w-4 ml-1" />
+                            عرض
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenAssignDialog(ticket)}
+                          >
+                            <UserPlus className="h-4 w-4 ml-1" />
+                            توجيه
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -637,6 +752,59 @@ export default function AdminTicketsPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Staff Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              توجيه التذكرة لموظف
+            </DialogTitle>
+            <DialogDescription>
+              اختر الموظف المسؤول عن هذه التذكرة
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>اختر الموظف *</Label>
+              <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر موظف..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {staffMembers.map((staff) => (
+                    <SelectItem key={staff.id} value={staff.id}>
+                      {staff.full_name} {staff.job_title ? `(${staff.job_title})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>ملاحظة للموظف (اختياري)</Label>
+              <Textarea
+                value={adminNote}
+                onChange={(e) => setAdminNote(e.target.value)}
+                placeholder="أضف ملاحظة أو تعليمات للموظف..."
+                className="min-h-[80px]"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleAssignTicket} disabled={!selectedStaffId || assigning}>
+              <Send className="h-4 w-4 ml-2" />
+              {assigning ? 'جاري التوجيه...' : 'توجيه التذكرة'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
