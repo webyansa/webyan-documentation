@@ -598,6 +598,86 @@ export type Database = {
         }
         Relationships: []
       }
+      escalation_settings: {
+        Row: {
+          created_at: string
+          escalation_hours: number
+          id: string
+          is_active: boolean | null
+          notify_admin: boolean | null
+          notify_staff: boolean | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          escalation_hours?: number
+          id?: string
+          is_active?: boolean | null
+          notify_admin?: boolean | null
+          notify_staff?: boolean | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          escalation_hours?: number
+          id?: string
+          is_active?: boolean | null
+          notify_admin?: boolean | null
+          notify_staff?: boolean | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      meeting_activity_log: {
+        Row: {
+          action_type: string
+          created_at: string
+          id: string
+          is_staff_action: boolean | null
+          meeting_id: string
+          new_value: string | null
+          note: string | null
+          old_value: string | null
+          performed_by: string | null
+          performed_by_name: string | null
+          recommendation: string | null
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          id?: string
+          is_staff_action?: boolean | null
+          meeting_id: string
+          new_value?: string | null
+          note?: string | null
+          old_value?: string | null
+          performed_by?: string | null
+          performed_by_name?: string | null
+          recommendation?: string | null
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          id?: string
+          is_staff_action?: boolean | null
+          meeting_id?: string
+          new_value?: string | null
+          note?: string | null
+          old_value?: string | null
+          performed_by?: string | null
+          performed_by_name?: string | null
+          recommendation?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_activity_log_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meeting_requests: {
         Row: {
           admin_notes: string | null
@@ -610,10 +690,14 @@ export type Database = {
           duration_minutes: number
           id: string
           meeting_link: string | null
+          meeting_outcome: string | null
           meeting_type: string
           organization_id: string
           preferred_date: string
+          report_submitted_at: string | null
           requested_by: string | null
+          staff_notes: string | null
+          staff_recommendation: string | null
           status: Database["public"]["Enums"]["meeting_status"]
           subject: string
           updated_at: string
@@ -629,10 +713,14 @@ export type Database = {
           duration_minutes?: number
           id?: string
           meeting_link?: string | null
+          meeting_outcome?: string | null
           meeting_type?: string
           organization_id: string
           preferred_date: string
+          report_submitted_at?: string | null
           requested_by?: string | null
+          staff_notes?: string | null
+          staff_recommendation?: string | null
           status?: Database["public"]["Enums"]["meeting_status"]
           subject: string
           updated_at?: string
@@ -648,10 +736,14 @@ export type Database = {
           duration_minutes?: number
           id?: string
           meeting_link?: string | null
+          meeting_outcome?: string | null
           meeting_type?: string
           organization_id?: string
           preferred_date?: string
+          report_submitted_at?: string | null
           requested_by?: string | null
+          staff_notes?: string | null
+          staff_recommendation?: string | null
           status?: Database["public"]["Enums"]["meeting_status"]
           subject?: string
           updated_at?: string
@@ -816,13 +908,17 @@ export type Database = {
           closure_report: string | null
           created_at: string
           description: string
+          escalated_at: string | null
+          escalation_reason: string | null
           guest_email: string | null
           guest_name: string | null
           id: string
+          is_escalated: boolean | null
           priority: string
           resolved_at: string | null
           resolved_by: string | null
           screenshot_url: string | null
+          staff_status: string | null
           status: string
           subject: string
           ticket_number: string
@@ -838,13 +934,17 @@ export type Database = {
           closure_report?: string | null
           created_at?: string
           description: string
+          escalated_at?: string | null
+          escalation_reason?: string | null
           guest_email?: string | null
           guest_name?: string | null
           id?: string
+          is_escalated?: boolean | null
           priority?: string
           resolved_at?: string | null
           resolved_by?: string | null
           screenshot_url?: string | null
+          staff_status?: string | null
           status?: string
           subject: string
           ticket_number: string
@@ -860,13 +960,17 @@ export type Database = {
           closure_report?: string | null
           created_at?: string
           description?: string
+          escalated_at?: string | null
+          escalation_reason?: string | null
           guest_email?: string | null
           guest_name?: string | null
           id?: string
+          is_escalated?: boolean | null
           priority?: string
           resolved_at?: string | null
           resolved_by?: string | null
           screenshot_url?: string | null
+          staff_status?: string | null
           status?: string
           subject?: string
           ticket_number?: string
@@ -910,6 +1014,53 @@ export type Database = {
           value?: string
         }
         Relationships: []
+      }
+      ticket_activity_log: {
+        Row: {
+          action_type: string
+          created_at: string
+          id: string
+          is_staff_action: boolean | null
+          new_value: string | null
+          note: string | null
+          old_value: string | null
+          performed_by: string | null
+          performed_by_name: string | null
+          ticket_id: string
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          id?: string
+          is_staff_action?: boolean | null
+          new_value?: string | null
+          note?: string | null
+          old_value?: string | null
+          performed_by?: string | null
+          performed_by_name?: string | null
+          ticket_id: string
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          id?: string
+          is_staff_action?: boolean | null
+          new_value?: string | null
+          note?: string | null
+          old_value?: string | null
+          performed_by?: string | null
+          performed_by_name?: string | null
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_activity_log_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ticket_replies: {
         Row: {

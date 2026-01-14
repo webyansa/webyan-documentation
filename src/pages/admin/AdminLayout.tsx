@@ -95,6 +95,8 @@ const managementSection: NavSection = {
   adminOnly: true,
   items: [
     { title: 'الموظفين', href: '/admin/staff', icon: UserCog, requiredRole: 'admin' },
+    { title: 'أداء الموظفين', href: '/admin/staff-performance', icon: BarChart3, requiredRole: 'admin' },
+    { title: 'إعدادات التصعيد', href: '/admin/escalation-settings', icon: AlertTriangle, requiredRole: 'admin' },
     { title: 'التقارير', href: '/admin/reports', icon: BarChart3, requiredRole: 'admin' },
     { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, requiredRole: 'admin' },
     { title: 'المستخدمين', href: '/admin/users', icon: Users, requiredRole: 'admin' },

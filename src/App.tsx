@@ -42,6 +42,8 @@ import ClientsPage from "./pages/admin/ClientsPage";
 import AdminMeetingsPage from "./pages/admin/AdminMeetingsPage";
 import MeetingSettingsPage from "./pages/admin/MeetingSettingsPage";
 import StaffPage from "./pages/admin/StaffPage";
+import StaffPerformancePage from "./pages/admin/StaffPerformancePage";
+import EscalationSettingsPage from "./pages/admin/EscalationSettingsPage";
 
 // Client Portal pages
 import PortalLayout from "./pages/portal/PortalLayout";
@@ -133,6 +135,8 @@ const App = () => (
                 <Route path="meetings" element={<AdminMeetingsPage />} />
                 <Route path="meeting-settings" element={<MeetingSettingsPage />} />
                 <Route path="staff" element={<StaffPage />} />
+                <Route path="staff-performance" element={<StaffPerformancePage />} />
+                <Route path="escalation-settings" element={<EscalationSettingsPage />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />
