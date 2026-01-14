@@ -598,6 +598,59 @@ export type Database = {
         }
         Relationships: []
       }
+      embed_tokens: {
+        Row: {
+          allowed_domains: string[] | null
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          last_used_at: string | null
+          name: string
+          organization_id: string
+          token: string
+          updated_at: string
+          usage_count: number | null
+        }
+        Insert: {
+          allowed_domains?: string[] | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          name: string
+          organization_id: string
+          token: string
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Update: {
+          allowed_domains?: string[] | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          name?: string
+          organization_id?: string
+          token?: string
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "embed_tokens_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "client_organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       escalation_settings: {
         Row: {
           created_at: string
