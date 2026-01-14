@@ -40,6 +40,7 @@ import AdminTicketsPage from "./pages/admin/AdminTicketsPage";
 import ClientsPage from "./pages/admin/ClientsPage";
 import AdminMeetingsPage from "./pages/admin/AdminMeetingsPage";
 import MeetingSettingsPage from "./pages/admin/MeetingSettingsPage";
+import StaffPage from "./pages/admin/StaffPage";
 
 // Client Portal pages
 import PortalLayout from "./pages/portal/PortalLayout";
@@ -112,6 +113,7 @@ const App = () => (
               <Route path="clients" element={<ClientsPage />} />
               <Route path="meetings" element={<AdminMeetingsPage />} />
               <Route path="meeting-settings" element={<MeetingSettingsPage />} />
+              <Route path="staff" element={<StaffPage />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
