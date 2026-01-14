@@ -678,6 +678,51 @@ export type Database = {
           },
         ]
       }
+      meeting_ratings: {
+        Row: {
+          comment: string | null
+          created_at: string
+          id: string
+          meeting_id: string
+          organization_id: string
+          rated_by: string | null
+          rating: number
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          meeting_id: string
+          organization_id: string
+          rated_by?: string | null
+          rating: number
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          meeting_id?: string
+          organization_id?: string
+          rated_by?: string | null
+          rating?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_ratings_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_ratings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "client_organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meeting_requests: {
         Row: {
           admin_notes: string | null
