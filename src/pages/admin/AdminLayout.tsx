@@ -24,16 +24,29 @@ import {
   Building2,
   Calendar,
   Clock,
-  UserCog
+  UserCog,
+  CalendarDays,
+  MessageSquare,
+  BookOpen,
+  Home,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import webyanLogo from '@/assets/webyan-logo.svg';
-import { Loader2 } from 'lucide-react';
 
 interface NavItem {
   title: string;
@@ -81,6 +94,7 @@ const managementSection: NavSection = {
   title: 'الإدارة',
   adminOnly: true,
   items: [
+    { title: 'الموظفين', href: '/admin/staff', icon: UserCog, requiredRole: 'admin' },
     { title: 'التقارير', href: '/admin/reports', icon: BarChart3, requiredRole: 'admin' },
     { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, requiredRole: 'admin' },
     { title: 'المستخدمين', href: '/admin/users', icon: Users, requiredRole: 'admin' },

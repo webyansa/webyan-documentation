@@ -97,7 +97,7 @@ export default function StaffPage() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setStaff((data as StaffMember[]) || []);
+      setStaff((data as unknown as StaffMember[]) || []);
     } catch (error) {
       console.error('Error fetching staff:', error);
       toast.error('حدث خطأ في تحميل بيانات الموظفين');
