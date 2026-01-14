@@ -1,39 +1,36 @@
 import { useState, useEffect } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { supabase } from '@/integrations/supabase/client';
 import {
   LayoutDashboard,
   FileText,
   FolderTree,
   Image,
-  MessageSquare,
-  BarChart3,
-  Settings,
-  Users,
   Tags,
   History,
+  ThumbsUp,
   AlertTriangle,
   Search,
-  LogOut,
-  ChevronLeft,
+  BarChart3,
+  Users,
+  Settings,
   Menu,
-  BookOpen,
-  Home,
-  CalendarDays,
+  X,
+  LogOut,
+  ChevronDown,
+  ChevronLeft,
   Ticket,
+  Building2,
+  Calendar,
+  Clock,
+  UserCog
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import webyanLogo from '@/assets/webyan-logo.svg';
 import { Loader2 } from 'lucide-react';

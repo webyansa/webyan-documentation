@@ -8,11 +8,13 @@ import {
   Clock, 
   Check,
   X,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useMeetingSettings } from '@/hooks/useMeetingSettings';
 
 interface BookedSlot {
   date: Date;
@@ -36,18 +38,6 @@ interface MeetingCalendarProps {
   onTimeSelect: (time: string) => void;
 }
 
-// Working hours configuration
-const WORKING_HOURS = {
-  start: 9, // 9 AM
-  end: 17,  // 5 PM
-  slotDuration: 30, // minutes
-  breakStart: 12, // 12 PM
-  breakEnd: 13, // 1 PM (lunch break)
-};
-
-// Days off (Friday = 5, Saturday = 6 in JavaScript)
-const DAYS_OFF = [5, 6]; // Friday and Saturday
-
 export function MeetingCalendar({
   selectedDate,
   selectedTime,
@@ -55,10 +45,11 @@ export function MeetingCalendar({
   onDateSelect,
   onTimeSelect
 }: MeetingCalendarProps) {
+  const { settings, loading: settingsLoading, getDaysOff, isHoliday, isWorkingDay } = useMeetingSettings();
+  
   const [currentWeekStart, setCurrentWeekStart] = useState(() => {
     const now = new Date();
-    // Start from next day if it's after working hours
-    if (now.getHours() >= WORKING_HOURS.end) {
+    if (now.getHours() >= 17) {
       return startOfWeek(addDays(now, 1), { weekStartsOn: 0 });
     }
     return startOfWeek(now, { weekStartsOn: 0 });
@@ -68,11 +59,31 @@ export function MeetingCalendar({
 
   useEffect(() => {
     fetchBookedSlots();
+
+    // Subscribe to realtime changes for meetings
+    const channel = supabase
+      .channel('meeting-bookings-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'meeting_requests'
+        },
+        () => {
+          console.log('Meeting bookings updated, refreshing...');
+          fetchBookedSlots();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [currentWeekStart]);
 
   const fetchBookedSlots = async () => {
     try {
-      // Fetch confirmed meetings for the visible period (current week + 4 weeks)
       const startDate = currentWeekStart;
       const endDate = addDays(currentWeekStart, 35);
 
@@ -117,21 +128,25 @@ export function MeetingCalendar({
     const now = new Date();
     // Can't book in the past
     if (isBefore(date, now) && !isSameDay(date, now)) return false;
-    // Can't book on days off
-    if (DAYS_OFF.includes(date.getDay())) return false;
+    // Can't book on days off (from settings)
+    if (!isWorkingDay(date)) return false;
+    // Can't book on holidays
+    if (isHoliday(date)) return false;
     return true;
   };
 
-  const getDateStatus = (date: Date): 'available' | 'partial' | 'booked' | 'unavailable' => {
+  const getDateStatus = (date: Date): 'available' | 'partial' | 'booked' | 'unavailable' | 'holiday' => {
+    if (isHoliday(date)) return 'holiday';
     if (!isDateAvailable(date)) return 'unavailable';
     
     const dayBookings = bookedSlots.filter(slot => isSameDay(slot.date, date));
     
     if (dayBookings.length === 0) return 'available';
     
-    // Calculate available slots for the day
-    const totalSlots = ((WORKING_HOURS.end - WORKING_HOURS.start) * 60 / WORKING_HOURS.slotDuration) - 
-                       ((WORKING_HOURS.breakEnd - WORKING_HOURS.breakStart) * 60 / WORKING_HOURS.slotDuration);
+    // Calculate available slots for the day using settings
+    const workHours = settings.workEndHour - settings.workStartHour;
+    const breakHours = settings.breakEndHour - settings.breakStartHour;
+    const totalSlots = ((workHours - breakHours) * 60) / settings.slotDuration;
     
     if (dayBookings.length >= totalSlots * 0.8) return 'booked';
     return 'partial';
@@ -141,11 +156,11 @@ export function MeetingCalendar({
     const slots: TimeSlot[] = [];
     const now = new Date();
     
-    for (let hour = WORKING_HOURS.start; hour < WORKING_HOURS.end; hour++) {
+    for (let hour = settings.workStartHour; hour < settings.workEndHour; hour++) {
       // Skip lunch break
-      if (hour >= WORKING_HOURS.breakStart && hour < WORKING_HOURS.breakEnd) continue;
+      if (hour >= settings.breakStartHour && hour < settings.breakEndHour) continue;
       
-      for (let minute = 0; minute < 60; minute += WORKING_HOURS.slotDuration) {
+      for (let minute = 0; minute < 60; minute += settings.slotDuration) {
         const slotTime = setMinutes(setHours(date, hour), minute);
         
         // Skip if slot is in the past
@@ -156,7 +171,6 @@ export function MeetingCalendar({
           const bookingEnd = addMinutes(booking.date, booking.duration);
           const slotEnd = addMinutes(slotTime, duration);
           
-          // Check for overlap
           return (
             (isAfter(slotTime, booking.date) || isSameDay(slotTime, booking.date)) &&
             isBefore(slotTime, bookingEnd)
@@ -172,12 +186,12 @@ export function MeetingCalendar({
 
         // Check if the meeting duration would exceed working hours
         const meetingEnd = addMinutes(slotTime, duration);
-        const workdayEnd = setMinutes(setHours(date, WORKING_HOURS.end), 0);
+        const workdayEnd = setMinutes(setHours(date, settings.workEndHour), 0);
         const exceedsWorkday = isAfter(meetingEnd, workdayEnd);
 
         // Check if meeting would overlap with lunch break
-        const lunchStart = setMinutes(setHours(date, WORKING_HOURS.breakStart), 0);
-        const lunchEnd = setMinutes(setHours(date, WORKING_HOURS.breakEnd), 0);
+        const lunchStart = setMinutes(setHours(date, settings.breakStartHour), 0);
+        const lunchEnd = setMinutes(setHours(date, settings.breakEndHour), 0);
         const overlapsLunch = (
           (isAfter(slotTime, lunchStart) || isSameDay(slotTime, lunchStart)) &&
           isBefore(slotTime, lunchEnd)
@@ -211,6 +225,15 @@ export function MeetingCalendar({
   };
 
   const canGoBack = isAfter(currentWeekStart, new Date());
+
+  if (settingsLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="mr-3 text-muted-foreground">جاري تحميل إعدادات المواعيد...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -267,12 +290,14 @@ export function MeetingCalendar({
               const status = getDateStatus(day);
               const isSelected = selectedDate && isSameDay(day, selectedDate);
               const isToday = isSameDay(day, new Date());
+              const holiday = settings.holidays.find(h => h.date === format(day, 'yyyy-MM-dd'));
               
               return (
                 <button
                   key={dayIndex}
-                  onClick={() => status !== 'unavailable' && status !== 'booked' && onDateSelect(day)}
-                  disabled={status === 'unavailable' || status === 'booked'}
+                  onClick={() => status !== 'unavailable' && status !== 'booked' && status !== 'holiday' && onDateSelect(day)}
+                  disabled={status === 'unavailable' || status === 'booked' || status === 'holiday'}
+                  title={holiday?.name}
                   className={cn(
                     "relative p-3 rounded-lg border-2 transition-all text-center",
                     "hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20",
@@ -280,6 +305,7 @@ export function MeetingCalendar({
                     !isSelected && status === 'available' && "border-green-200 bg-green-50 hover:bg-green-100",
                     !isSelected && status === 'partial' && "border-yellow-200 bg-yellow-50 hover:bg-yellow-100",
                     status === 'booked' && "border-red-200 bg-red-50 cursor-not-allowed opacity-60",
+                    status === 'holiday' && "border-orange-200 bg-orange-50 cursor-not-allowed opacity-70",
                     status === 'unavailable' && "border-gray-200 bg-gray-100 cursor-not-allowed opacity-50",
                     isToday && "ring-2 ring-blue-400/50"
                   )}
@@ -290,7 +316,8 @@ export function MeetingCalendar({
                   <div className={cn(
                     "text-lg font-semibold",
                     isSelected && "text-primary",
-                    status === 'unavailable' && "text-gray-400"
+                    status === 'unavailable' && "text-gray-400",
+                    status === 'holiday' && "text-orange-600"
                   )}>
                     {format(day, 'd')}
                   </div>
@@ -300,6 +327,7 @@ export function MeetingCalendar({
                     {status === 'available' && <div className="w-2 h-2 rounded-full bg-green-500" />}
                     {status === 'partial' && <div className="w-2 h-2 rounded-full bg-yellow-500" />}
                     {status === 'booked' && <div className="w-2 h-2 rounded-full bg-red-500" />}
+                    {status === 'holiday' && <div className="w-2 h-2 rounded-full bg-orange-500" />}
                   </div>
 
                   {isSelected && (
@@ -366,8 +394,8 @@ export function MeetingCalendar({
 
           {/* Working hours info */}
           <div className="text-xs text-muted-foreground flex items-center gap-4 pt-2">
-            <span>ساعات العمل: {WORKING_HOURS.start}:00 - {WORKING_HOURS.end}:00</span>
-            <span>استراحة: {WORKING_HOURS.breakStart}:00 - {WORKING_HOURS.breakEnd}:00</span>
+            <span>ساعات العمل: {settings.workStartHour}:00 - {settings.workEndHour}:00</span>
+            <span>استراحة: {settings.breakStartHour}:00 - {settings.breakEndHour}:00</span>
           </div>
         </div>
       )}
