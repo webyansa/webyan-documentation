@@ -21,6 +21,7 @@ import MyTicketsPage from "./pages/MyTicketsPage";
 import TicketDetailPage from "./pages/TicketDetailPage";
 import TrackTicketPage from "./pages/TrackTicketPage";
 import PortalLoginPage from "./pages/PortalLoginPage";
+import EmbedTicketPage from "./pages/embed/EmbedTicketPage";
 
 // Admin pages
 import AdminLayout from "./pages/admin/AdminLayout";
@@ -44,6 +45,7 @@ import MeetingSettingsPage from "./pages/admin/MeetingSettingsPage";
 import StaffPage from "./pages/admin/StaffPage";
 import StaffPerformancePage from "./pages/admin/StaffPerformancePage";
 import EscalationSettingsPage from "./pages/admin/EscalationSettingsPage";
+import EmbedSettingsPage from "./pages/admin/EmbedSettingsPage";
 
 // Client Portal pages
 import PortalLayout from "./pages/portal/PortalLayout";
@@ -87,6 +89,7 @@ const App = () => (
               <Route path="/my-tickets/:ticketId" element={<TicketDetailPage />} />
               <Route path="/track-ticket" element={<TrackTicketPage />} />
               <Route path="/portal-login" element={<PortalLoginPage />} />
+              <Route path="/embed/ticket" element={<EmbedTicketPage />} />
               <Route path="/docs/:moduleSlug" element={<ModulePage />} />
               <Route path="/docs/:moduleSlug/:subModuleSlug" element={<ModulePage />} />
               <Route path="/docs/:moduleSlug/:subModuleSlug/:articleSlug" element={<ArticlePage />} />
@@ -137,6 +140,7 @@ const App = () => (
                 <Route path="staff" element={<StaffPage />} />
                 <Route path="staff-performance" element={<StaffPerformancePage />} />
                 <Route path="escalation-settings" element={<EscalationSettingsPage />} />
+                <Route path="embed-settings" element={<EmbedSettingsPage />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />

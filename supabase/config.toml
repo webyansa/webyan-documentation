@@ -1,5 +1,11 @@
 project_id = "mzzhpknxooubophxvwch"
 
+[functions.verify-embed-token]
+verify_jwt = false
+
+[functions.create-embed-ticket]
+verify_jwt = false
+
 [functions.send-welcome-email]
 verify_jwt = false
 
