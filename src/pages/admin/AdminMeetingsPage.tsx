@@ -19,7 +19,8 @@ import {
   Filter,
   Search,
   ExternalLink,
-  Send
+  Send,
+  UserPlus
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -62,6 +63,7 @@ interface MeetingRequest {
   status: string;
   meeting_link: string | null;
   admin_notes: string | null;
+  assigned_staff: string | null;
   created_at: string;
   updated_at: string;
   organization?: {
@@ -69,6 +71,10 @@ interface MeetingRequest {
     contact_email: string;
   };
   requester?: {
+    full_name: string;
+    email: string;
+  };
+  staff?: {
     full_name: string;
     email: string;
   };
@@ -92,6 +98,12 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.C
 
 const allStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'rescheduled'] as const;
 
+interface StaffMember {
+  id: string;
+  full_name: string;
+  email: string;
+  can_attend_meetings: boolean;
+}
 export default function AdminMeetingsPage() {
   const { user } = useAuth();
   const [meetings, setMeetings] = useState<MeetingRequest[]>([]);
@@ -118,9 +130,34 @@ export default function AdminMeetingsPage() {
 
   const [actionType, setActionType] = useState<'confirm' | 'reject' | 'view' | null>(null);
 
+  // Staff assignment
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [meetingToAssign, setMeetingToAssign] = useState<MeetingRequest | null>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('');
+  const [staffNote, setStaffNote] = useState('');
+  const [assigning, setAssigning] = useState(false);
+
   useEffect(() => {
     fetchMeetings();
+    fetchStaffMembers();
   }, []);
+
+  const fetchStaffMembers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('staff_members')
+        .select('id, full_name, email, can_attend_meetings')
+        .eq('is_active', true)
+        .eq('can_attend_meetings', true)
+        .order('full_name');
+
+      if (error) throw error;
+      setStaffMembers((data as StaffMember[]) || []);
+    } catch (error) {
+      console.error('Error fetching staff members:', error);
+    }
+  };
 
   const fetchMeetings = async () => {
     try {
@@ -131,10 +168,10 @@ export default function AdminMeetingsPage() {
 
       if (error) throw error;
 
-      // Fetch organization and requester details separately
+      // Fetch organization, requester, and staff details separately
       const meetingsWithDetails = await Promise.all(
         (data || []).map(async (meeting) => {
-          const [orgResult, requesterResult] = await Promise.all([
+          const [orgResult, requesterResult, staffResult] = await Promise.all([
             supabase
               .from('client_organizations')
               .select('name, contact_email')
@@ -146,13 +183,21 @@ export default function AdminMeetingsPage() {
                   .select('full_name, email')
                   .eq('user_id', meeting.requested_by)
                   .single()
+              : Promise.resolve({ data: null }),
+            meeting.assigned_staff
+              ? supabase
+                  .from('staff_members')
+                  .select('full_name, email')
+                  .eq('id', meeting.assigned_staff)
+                  .single()
               : Promise.resolve({ data: null })
           ]);
 
           return {
             ...meeting,
             organization: orgResult.data || undefined,
-            requester: requesterResult.data || undefined
+            requester: requesterResult.data || undefined,
+            staff: staffResult.data || undefined
           };
         })
       );
@@ -311,6 +356,47 @@ export default function AdminMeetingsPage() {
       });
     } catch (error) {
       console.error('Error sending notification:', error);
+    }
+  };
+
+  // Assign meeting to staff
+  const handleOpenAssignDialog = (meeting: MeetingRequest) => {
+    setMeetingToAssign(meeting);
+    setSelectedStaffId(meeting.assigned_staff || '');
+    setStaffNote(meeting.admin_notes || '');
+    setAssignDialogOpen(true);
+  };
+
+  const handleAssignMeeting = async () => {
+    if (!meetingToAssign || !selectedStaffId) {
+      toast.error('يرجى اختيار موظف');
+      return;
+    }
+
+    setAssigning(true);
+    try {
+      const { error } = await supabase
+        .from('meeting_requests')
+        .update({
+          assigned_staff: selectedStaffId,
+          admin_notes: staffNote || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', meetingToAssign.id);
+
+      if (error) throw error;
+
+      toast.success('تم توجيه الاجتماع للموظف بنجاح');
+      setAssignDialogOpen(false);
+      setMeetingToAssign(null);
+      setSelectedStaffId('');
+      setStaffNote('');
+      fetchMeetings();
+    } catch (error: any) {
+      console.error('Error assigning meeting:', error);
+      toast.error(error.message || 'حدث خطأ');
+    } finally {
+      setAssigning(false);
     }
   };
 

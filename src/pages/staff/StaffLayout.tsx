@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useStaffAuth } from '@/hooks/useStaffAuth';
+import { useStaffNotifications } from '@/hooks/useStaffNotifications';
 import {
   LayoutDashboard,
   FileText,
@@ -39,6 +40,8 @@ export default function StaffLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, loading, isStaff, permissions, signOut } = useStaffAuth();
+  // Initialize staff notifications with sound
+  useStaffNotifications();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [staffName, setStaffName] = useState<string>('');
 
