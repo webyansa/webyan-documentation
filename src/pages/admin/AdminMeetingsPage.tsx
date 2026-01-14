@@ -20,7 +20,12 @@ import {
   Search,
   ExternalLink,
   Send,
-  UserPlus
+  UserPlus,
+  Star,
+  FileText,
+  Eye,
+  BarChart3,
+  TrendingUp
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,6 +53,16 @@ import {
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
+import MeetingDetailsDialog from '@/components/meetings/MeetingDetailsDialog';
+
+interface MeetingRating {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+}
 
 interface MeetingRequest {
   id: string;
@@ -64,6 +79,11 @@ interface MeetingRequest {
   meeting_link: string | null;
   admin_notes: string | null;
   assigned_staff: string | null;
+  closure_report: string | null;
+  staff_recommendation: string | null;
+  staff_notes: string | null;
+  meeting_outcome: string | null;
+  report_submitted_at: string | null;
   created_at: string;
   updated_at: string;
   organization?: {
@@ -78,25 +98,31 @@ interface MeetingRequest {
     full_name: string;
     email: string;
   };
+  rating?: MeetingRating;
 }
 
-const meetingTypes: Record<string, { label: string; color: string }> = {
-  general: { label: 'اجتماع عام', color: 'bg-blue-100 text-blue-800' },
-  training: { label: 'جلسة تدريبية', color: 'bg-green-100 text-green-800' },
-  support: { label: 'دعم فني', color: 'bg-orange-100 text-orange-800' },
-  demo: { label: 'عرض توضيحي', color: 'bg-purple-100 text-purple-800' },
-  consultation: { label: 'استشارة', color: 'bg-pink-100 text-pink-800' },
+const meetingTypes: Record<string, { label: string; color: string; bgColor: string }> = {
+  general: { label: 'اجتماع عام', color: 'text-blue-700', bgColor: 'bg-blue-50 border-blue-200' },
+  training: { label: 'جلسة تدريبية', color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200' },
+  support: { label: 'دعم فني', color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200' },
+  demo: { label: 'عرض توضيحي', color: 'text-violet-700', bgColor: 'bg-violet-50 border-violet-200' },
+  consultation: { label: 'استشارة', color: 'text-pink-700', bgColor: 'bg-pink-50 border-pink-200' },
 };
 
-const statusConfig: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
-  pending: { label: 'قيد الانتظار', color: 'bg-yellow-100 text-yellow-800', icon: CalendarDays },
-  confirmed: { label: 'مؤكد', color: 'bg-green-100 text-green-800', icon: CalendarCheck },
-  cancelled: { label: 'ملغي', color: 'bg-red-100 text-red-800', icon: CalendarX },
-  completed: { label: 'منتهي', color: 'bg-gray-100 text-gray-800', icon: CheckCircle2 },
-  rescheduled: { label: 'معاد جدولته', color: 'bg-blue-100 text-blue-800', icon: Calendar },
+const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: React.ComponentType<{ className?: string }> }> = {
+  pending: { label: 'قيد الانتظار', color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200', icon: CalendarDays },
+  confirmed: { label: 'مؤكد', color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200', icon: CalendarCheck },
+  cancelled: { label: 'ملغي', color: 'text-red-700', bgColor: 'bg-red-50 border-red-200', icon: CalendarX },
+  completed: { label: 'منتهي', color: 'text-slate-700', bgColor: 'bg-slate-50 border-slate-200', icon: CheckCircle2 },
+  rescheduled: { label: 'معاد جدولته', color: 'text-blue-700', bgColor: 'bg-blue-50 border-blue-200', icon: Calendar },
 };
 
-const allStatuses = ['pending', 'confirmed', 'completed', 'cancelled', 'rescheduled'] as const;
+const outcomeConfig: Record<string, { label: string; color: string }> = {
+  successful: { label: 'تم بنجاح', color: 'text-emerald-600' },
+  no_show: { label: 'لم يحضر العميل', color: 'text-orange-600' },
+  rescheduled_by_client: { label: 'أجله العميل', color: 'text-blue-600' },
+  failed: { label: 'تعذر الإتمام', color: 'text-red-600' },
+};
 
 interface StaffMember {
   id: string;
@@ -104,12 +130,25 @@ interface StaffMember {
   email: string;
   can_attend_meetings: boolean;
 }
+
+const StarRating = ({ rating }: { rating: number }) => (
+  <div className="flex items-center gap-0.5">
+    {[1, 2, 3, 4, 5].map((star) => (
+      <Star
+        key={star}
+        className={`h-4 w-4 ${star <= rating ? 'fill-amber-400 text-amber-400' : 'fill-muted text-muted'}`}
+      />
+    ))}
+  </div>
+);
+
 export default function AdminMeetingsPage() {
   const { user } = useAuth();
   const [meetings, setMeetings] = useState<MeetingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingRequest | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -128,7 +167,7 @@ export default function AdminMeetingsPage() {
     admin_notes: ''
   });
 
-  const [actionType, setActionType] = useState<'confirm' | 'reject' | 'view' | null>(null);
+  const [actionType, setActionType] = useState<'confirm' | 'reject' | null>(null);
 
   // Staff assignment
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
@@ -168,10 +207,10 @@ export default function AdminMeetingsPage() {
 
       if (error) throw error;
 
-      // Fetch organization, requester, and staff details separately
+      // Fetch organization, requester, staff, and rating details
       const meetingsWithDetails = await Promise.all(
         (data || []).map(async (meeting) => {
-          const [orgResult, requesterResult, staffResult] = await Promise.all([
+          const [orgResult, requesterResult, staffResult, ratingResult] = await Promise.all([
             supabase
               .from('client_organizations')
               .select('name, contact_email')
@@ -190,14 +229,20 @@ export default function AdminMeetingsPage() {
                   .select('full_name, email')
                   .eq('id', meeting.assigned_staff)
                   .single()
-              : Promise.resolve({ data: null })
+              : Promise.resolve({ data: null }),
+            supabase
+              .from('meeting_ratings')
+              .select('id, rating, comment, created_at')
+              .eq('meeting_id', meeting.id)
+              .maybeSingle()
           ]);
 
           return {
             ...meeting,
             organization: orgResult.data || undefined,
             requester: requesterResult.data || undefined,
-            staff: staffResult.data || undefined
+            staff: staffResult.data || undefined,
+            rating: ratingResult.data || undefined
           };
         })
       );
@@ -443,7 +488,7 @@ export default function AdminMeetingsPage() {
     setActionType(null);
   };
 
-  const openActionDialog = (meeting: MeetingRequest, type: 'confirm' | 'reject' | 'view') => {
+  const openActionDialog = (meeting: MeetingRequest, type: 'confirm' | 'reject') => {
     setSelectedMeeting(meeting);
     setActionType(type);
     
@@ -458,6 +503,11 @@ export default function AdminMeetingsPage() {
     }
     
     setDialogOpen(true);
+  };
+
+  const openDetailsDialog = (meeting: MeetingRequest) => {
+    setSelectedMeeting(meeting);
+    setDetailsDialogOpen(true);
   };
 
   const filteredMeetings = meetings.filter(meeting => {
@@ -477,7 +527,11 @@ export default function AdminMeetingsPage() {
     const confirmed = meetings.filter(m => m.status === 'confirmed').length;
     const completed = meetings.filter(m => m.status === 'completed').length;
     const cancelled = meetings.filter(m => m.status === 'cancelled').length;
-    return { pending, confirmed, completed, cancelled, total: meetings.length };
+    const withRating = meetings.filter(m => m.rating).length;
+    const avgRating = withRating > 0 
+      ? meetings.filter(m => m.rating).reduce((sum, m) => sum + (m.rating?.rating || 0), 0) / withRating 
+      : 0;
+    return { pending, confirmed, completed, cancelled, total: meetings.length, withRating, avgRating };
   };
 
   const stats = getStats();
@@ -508,77 +562,94 @@ export default function AdminMeetingsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-3">
-          <Calendar className="h-7 w-7 text-primary" />
-          إدارة طلبات الاجتماعات
-        </h1>
-        <p className="text-muted-foreground mt-1">إدارة ومتابعة طلبات الاجتماعات من العملاء</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5">
+              <Calendar className="h-6 w-6 text-primary" />
+            </div>
+            إدارة طلبات الاجتماعات
+          </h1>
+          <p className="text-muted-foreground mt-1">إدارة ومتابعة طلبات الاجتماعات من العملاء</p>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="pt-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <Card className="bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-200/50 dark:from-amber-950/20 dark:to-amber-900/10 dark:border-amber-800/30">
+          <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-yellow-100">
-                <CalendarDays className="h-5 w-5 text-yellow-700" />
+              <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/30 shadow-sm">
+                <CalendarDays className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.pending}</p>
-                <p className="text-xs text-muted-foreground">قيد الانتظار</p>
+                <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">{stats.pending}</p>
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/80">قيد الانتظار</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 border-emerald-200/50 dark:from-emerald-950/20 dark:to-emerald-900/10 dark:border-emerald-800/30">
+          <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100">
-                <CalendarCheck className="h-5 w-5 text-green-700" />
+              <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 shadow-sm">
+                <CalendarCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.confirmed}</p>
-                <p className="text-xs text-muted-foreground">مؤكد</p>
+                <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{stats.confirmed}</p>
+                <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80">مؤكد</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200/50 dark:from-blue-950/20 dark:to-blue-900/10 dark:border-blue-800/30">
+          <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-100">
-                <CheckCircle2 className="h-5 w-5 text-blue-700" />
+              <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/30 shadow-sm">
+                <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.completed}</p>
-                <p className="text-xs text-muted-foreground">منتهي</p>
+                <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{stats.completed}</p>
+                <p className="text-xs text-blue-600/80 dark:text-blue-400/80">منتهي</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="bg-gradient-to-br from-red-50 to-red-100/50 border-red-200/50 dark:from-red-950/20 dark:to-red-900/10 dark:border-red-800/30">
+          <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-red-100">
-                <CalendarX className="h-5 w-5 text-red-700" />
+              <div className="p-2.5 rounded-xl bg-red-100 dark:bg-red-900/30 shadow-sm">
+                <CalendarX className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.cancelled}</p>
-                <p className="text-xs text-muted-foreground">ملغي</p>
+                <p className="text-2xl font-bold text-red-700 dark:text-red-400">{stats.cancelled}</p>
+                <p className="text-xs text-red-600/80 dark:text-red-400/80">ملغي</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="bg-gradient-to-br from-violet-50 to-violet-100/50 border-violet-200/50 dark:from-violet-950/20 dark:to-violet-900/10 dark:border-violet-800/30">
+          <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-100">
-                <Calendar className="h-5 w-5 text-purple-700" />
+              <div className="p-2.5 rounded-xl bg-violet-100 dark:bg-violet-900/30 shadow-sm">
+                <Star className="h-5 w-5 text-violet-600 dark:text-violet-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.total}</p>
-                <p className="text-xs text-muted-foreground">الإجمالي</p>
+                <p className="text-2xl font-bold text-violet-700 dark:text-violet-400">{stats.avgRating.toFixed(1)}</p>
+                <p className="text-xs text-violet-600/80 dark:text-violet-400/80">متوسط التقييم</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-slate-50 to-slate-100/50 border-slate-200/50 dark:from-slate-950/20 dark:to-slate-900/10 dark:border-slate-800/30">
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/50 shadow-sm">
+                <BarChart3 className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-700 dark:text-slate-300">{stats.total}</p>
+                <p className="text-xs text-slate-500">الإجمالي</p>
               </div>
             </div>
           </CardContent>
@@ -586,8 +657,8 @@ export default function AdminMeetingsPage() {
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="shadow-sm">
+        <CardContent className="pt-5 pb-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -595,11 +666,11 @@ export default function AdminMeetingsPage() {
                 placeholder="بحث بالموضوع أو اسم المؤسسة..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-9"
+                className="pr-9 bg-muted/30 border-muted-foreground/10 focus:bg-background transition-colors"
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px] bg-muted/30 border-muted-foreground/10">
                 <Filter className="h-4 w-4 ml-2" />
                 <SelectValue placeholder="جميع الحالات" />
               </SelectTrigger>
@@ -616,89 +687,96 @@ export default function AdminMeetingsPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full justify-start">
-          <TabsTrigger value="pending" className="gap-2">
+        <TabsList className="w-full justify-start bg-muted/50 p-1 rounded-xl h-auto flex-wrap">
+          <TabsTrigger value="pending" className="gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <CalendarDays className="h-4 w-4" />
             قيد الانتظار
             {stats.pending > 0 && (
-              <Badge variant="destructive" className="mr-1 h-5 w-5 p-0 justify-center">
+              <Badge variant="destructive" className="mr-1 h-5 min-w-5 p-0 justify-center text-[10px]">
                 {stats.pending}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="confirmed" className="gap-2">
+          <TabsTrigger value="confirmed" className="gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <CalendarCheck className="h-4 w-4" />
             المؤكدة
           </TabsTrigger>
-          <TabsTrigger value="completed" className="gap-2">
+          <TabsTrigger value="completed" className="gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <CheckCircle2 className="h-4 w-4" />
             المنتهية
           </TabsTrigger>
-          <TabsTrigger value="all" className="gap-2">
+          <TabsTrigger value="all" className="gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Calendar className="h-4 w-4" />
             الكل
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-6">
-          <Card>
+          <Card className="shadow-sm overflow-hidden">
             <CardContent className="p-0">
               <ScrollArea className="h-[600px]">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>المؤسسة / مقدم الطلب</TableHead>
-                      <TableHead>الموضوع</TableHead>
-                      <TableHead>نوع الاجتماع</TableHead>
-                      <TableHead>الموعد المطلوب</TableHead>
-                      <TableHead>الموظف المسؤول</TableHead>
-                      <TableHead>الحالة</TableHead>
-                      <TableHead className="text-center">الإجراءات</TableHead>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableHead className="font-semibold">المؤسسة / مقدم الطلب</TableHead>
+                      <TableHead className="font-semibold">الموضوع</TableHead>
+                      <TableHead className="font-semibold">نوع الاجتماع</TableHead>
+                      <TableHead className="font-semibold">الموعد</TableHead>
+                      <TableHead className="font-semibold">الموظف</TableHead>
+                      <TableHead className="font-semibold">الحالة</TableHead>
+                      <TableHead className="font-semibold">التقييم</TableHead>
+                      <TableHead className="text-center font-semibold">الإجراءات</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredMeetings.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                          <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                          <p>لا توجد طلبات اجتماعات</p>
+                        <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
+                          <Calendar className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                          <p className="text-lg font-medium">لا توجد طلبات اجتماعات</p>
+                          <p className="text-sm mt-1">ستظهر هنا طلبات الاجتماعات الجديدة</p>
                         </TableCell>
                       </TableRow>
                     ) : (
                       filteredMeetings.map((meeting) => {
-                        const dateInfo = formatDateTime(meeting.preferred_date);
+                        const dateInfo = formatDateTime(meeting.confirmed_date || meeting.preferred_date);
                         const StatusIcon = statusConfig[meeting.status]?.icon || Calendar;
                         
                         return (
-                          <TableRow key={meeting.id}>
+                          <TableRow key={meeting.id} className="group hover:bg-muted/30 transition-colors">
                             <TableCell>
                               <div className="flex items-center gap-3">
-                                <div className="p-2 rounded-lg bg-muted">
-                                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                                </div>
+                                <Avatar className="h-10 w-10 bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10">
+                                  <AvatarFallback className="text-primary font-semibold text-sm">
+                                    {meeting.organization?.name?.charAt(0) || 'م'}
+                                  </AvatarFallback>
+                                </Avatar>
                                 <div>
-                                  <p className="font-medium">{meeting.organization?.name || 'غير معروف'}</p>
+                                  <p className="font-medium text-sm">{meeting.organization?.name || 'غير معروف'}</p>
                                   <p className="text-xs text-muted-foreground flex items-center gap-1">
                                     <User className="h-3 w-3" />
-                                    {meeting.requester?.full_name || meeting.requester?.email || '-'}
+                                    {meeting.requester?.full_name || '-'}
                                   </p>
                                 </div>
                               </div>
                             </TableCell>
                             <TableCell>
-                              <p className="font-medium line-clamp-1">{meeting.subject}</p>
-                              {meeting.description && (
-                                <p className="text-xs text-muted-foreground line-clamp-1">{meeting.description}</p>
+                              <p className="font-medium line-clamp-1 text-sm">{meeting.subject}</p>
+                              {meeting.closure_report && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <FileText className="h-3 w-3 text-emerald-600" />
+                                  <span className="text-xs text-emerald-600">يوجد تقرير</span>
+                                </div>
                               )}
                             </TableCell>
                             <TableCell>
-                              <Badge className={meetingTypes[meeting.meeting_type]?.color || 'bg-gray-100 text-gray-800'}>
+                              <Badge variant="outline" className={`${meetingTypes[meeting.meeting_type]?.bgColor} ${meetingTypes[meeting.meeting_type]?.color} border`}>
                                 {meetingTypes[meeting.meeting_type]?.label || meeting.meeting_type}
                               </Badge>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <div className={`p-1.5 rounded ${dateInfo.isPast && meeting.status === 'pending' ? 'bg-red-100' : 'bg-muted'}`}>
+                                <div className={`p-2 rounded-lg ${dateInfo.isPast && meeting.status === 'pending' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-muted'}`}>
                                   <Calendar className={`h-4 w-4 ${dateInfo.isPast && meeting.status === 'pending' ? 'text-red-600' : 'text-muted-foreground'}`} />
                                 </div>
                                 <div>
@@ -706,7 +784,7 @@ export default function AdminMeetingsPage() {
                                     {dateInfo.day}
                                   </p>
                                   <p className="text-xs text-muted-foreground">{dateInfo.date}</p>
-                                  <p className="text-xs font-medium flex items-center gap-1">
+                                  <p className="text-xs font-medium flex items-center gap-1 text-muted-foreground">
                                     <Clock className="h-3 w-3" />
                                     {dateInfo.time}
                                   </p>
@@ -716,16 +794,18 @@ export default function AdminMeetingsPage() {
                             <TableCell>
                               {meeting.staff ? (
                                 <div className="flex items-center gap-2">
-                                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-                                    <User className="h-3.5 w-3.5 text-primary" />
-                                  </div>
+                                  <Avatar className="h-7 w-7">
+                                    <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                                      {meeting.staff.full_name.charAt(0)}
+                                    </AvatarFallback>
+                                  </Avatar>
                                   <span className="text-sm font-medium">{meeting.staff.full_name}</span>
                                 </div>
                               ) : (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="gap-1 text-xs"
+                                  className="gap-1 text-xs h-8"
                                   onClick={() => handleOpenAssignDialog(meeting)}
                                 >
                                   <UserPlus className="h-3 w-3" />
@@ -734,31 +814,45 @@ export default function AdminMeetingsPage() {
                               )}
                             </TableCell>
                             <TableCell>
-                              <Badge className={statusConfig[meeting.status]?.color || 'bg-gray-100'}>
+                              <Badge variant="outline" className={`${statusConfig[meeting.status]?.bgColor} ${statusConfig[meeting.status]?.color} border`}>
                                 <StatusIcon className="h-3 w-3 ml-1" />
                                 {statusConfig[meeting.status]?.label || meeting.status}
                               </Badge>
+                              {meeting.meeting_outcome && (
+                                <p className={`text-xs mt-1 ${outcomeConfig[meeting.meeting_outcome]?.color}`}>
+                                  {outcomeConfig[meeting.meeting_outcome]?.label}
+                                </p>
+                              )}
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center justify-center gap-2">
+                              {meeting.rating ? (
+                                <div className="flex flex-col items-center">
+                                  <StarRating rating={meeting.rating.rating} />
+                                  <span className="text-xs text-muted-foreground mt-0.5">{meeting.rating.rating}/5</span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-center gap-1.5">
                                 {meeting.status === 'pending' && (
                                   <>
                                     <Button
                                       size="sm"
-                                      variant="default"
-                                      className="gap-1"
+                                      className="gap-1 h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
                                       onClick={() => openActionDialog(meeting, 'confirm')}
                                     >
-                                      <CheckCircle2 className="h-4 w-4" />
+                                      <CheckCircle2 className="h-3.5 w-3.5" />
                                       تأكيد
                                     </Button>
                                     <Button
                                       size="sm"
                                       variant="destructive"
-                                      className="gap-1"
+                                      className="gap-1 h-8 text-xs"
                                       onClick={() => openActionDialog(meeting, 'reject')}
                                     >
-                                      <XCircle className="h-4 w-4" />
+                                      <XCircle className="h-3.5 w-3.5" />
                                       رفض
                                     </Button>
                                   </>
@@ -769,52 +863,30 @@ export default function AdminMeetingsPage() {
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        className="gap-1"
+                                        className="gap-1 h-8 text-xs"
                                         onClick={() => window.open(meeting.meeting_link!, '_blank')}
                                       >
-                                        <Video className="h-4 w-4" />
+                                        <Video className="h-3.5 w-3.5" />
                                         انضم
                                       </Button>
                                     )}
                                     <Button
                                       size="sm"
                                       variant="secondary"
+                                      className="h-8 text-xs"
                                       onClick={() => handleCompleteMeeting(meeting)}
                                     >
                                       تم الانتهاء
                                     </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleStatusChange(meeting, 'pending')}
-                                    >
-                                      إرجاع للانتظار
-                                    </Button>
                                   </>
-                                )}
-                                {meeting.status === 'completed' && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleStatusChange(meeting, 'confirmed')}
-                                  >
-                                    إرجاع لمؤكد
-                                  </Button>
-                                )}
-                                {meeting.status === 'cancelled' && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleStatusChange(meeting, 'pending')}
-                                  >
-                                    إعادة فتح
-                                  </Button>
                                 )}
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => openActionDialog(meeting, 'view')}
+                                  className="gap-1 h-8 text-xs"
+                                  onClick={() => openDetailsDialog(meeting)}
                                 >
+                                  <Eye className="h-3.5 w-3.5" />
                                   التفاصيل
                                 </Button>
                               </div>
@@ -831,17 +903,23 @@ export default function AdminMeetingsPage() {
         </TabsContent>
       </Tabs>
 
+      {/* Meeting Details Dialog */}
+      <MeetingDetailsDialog
+        meeting={selectedMeeting}
+        open={detailsDialogOpen}
+        onOpenChange={setDetailsDialogOpen}
+        userType="admin"
+      />
+
       {/* Action Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForms(); setDialogOpen(false); } }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {actionType === 'confirm' && <CheckCircle2 className="h-5 w-5 text-green-600" />}
+              {actionType === 'confirm' && <CheckCircle2 className="h-5 w-5 text-emerald-600" />}
               {actionType === 'reject' && <XCircle className="h-5 w-5 text-red-600" />}
-              {actionType === 'view' && <Calendar className="h-5 w-5 text-primary" />}
               {actionType === 'confirm' && 'تأكيد الاجتماع'}
               {actionType === 'reject' && 'رفض طلب الاجتماع'}
-              {actionType === 'view' && 'تفاصيل الاجتماع'}
             </DialogTitle>
             <DialogDescription>
               {selectedMeeting?.subject}
@@ -851,7 +929,7 @@ export default function AdminMeetingsPage() {
           {selectedMeeting && (
             <div className="space-y-6">
               {/* Meeting Info */}
-              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-xl">
                 <div>
                   <p className="text-xs text-muted-foreground">المؤسسة</p>
                   <p className="font-medium">{selectedMeeting.organization?.name}</p>
@@ -862,7 +940,7 @@ export default function AdminMeetingsPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">نوع الاجتماع</p>
-                  <Badge className={meetingTypes[selectedMeeting.meeting_type]?.color}>
+                  <Badge className={meetingTypes[selectedMeeting.meeting_type]?.bgColor}>
                     {meetingTypes[selectedMeeting.meeting_type]?.label}
                   </Badge>
                 </div>
@@ -870,43 +948,24 @@ export default function AdminMeetingsPage() {
                   <p className="text-xs text-muted-foreground">المدة</p>
                   <p className="font-medium">{selectedMeeting.duration_minutes} دقيقة</p>
                 </div>
-                <div className="col-span-2">
-                  <p className="text-xs text-muted-foreground">الموعد المفضل</p>
-                  <p className="font-medium">
-                    {format(parseISO(selectedMeeting.preferred_date), 'EEEE d MMMM yyyy - HH:mm', { locale: ar })}
-                  </p>
-                </div>
-                {selectedMeeting.alternative_date && (
-                  <div className="col-span-2">
-                    <p className="text-xs text-muted-foreground">الموعد البديل</p>
-                    <p className="font-medium">
-                      {format(parseISO(selectedMeeting.alternative_date), 'EEEE d MMMM yyyy - HH:mm', { locale: ar })}
-                    </p>
-                  </div>
-                )}
-                {selectedMeeting.description && (
-                  <div className="col-span-2">
-                    <p className="text-xs text-muted-foreground">الوصف</p>
-                    <p className="text-sm">{selectedMeeting.description}</p>
-                  </div>
-                )}
               </div>
 
-              {/* Confirm Form */}
               {actionType === 'confirm' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>تاريخ الاجتماع المؤكد *</Label>
+                      <Label htmlFor="confirmed_date">التاريخ المؤكد *</Label>
                       <Input
+                        id="confirmed_date"
                         type="date"
                         value={confirmForm.confirmed_date}
                         onChange={(e) => setConfirmForm({ ...confirmForm, confirmed_date: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>وقت الاجتماع *</Label>
+                      <Label htmlFor="confirmed_time">الوقت المؤكد *</Label>
                       <Input
+                        id="confirmed_time"
                         type="time"
                         value={confirmForm.confirmed_time}
                         onChange={(e) => setConfirmForm({ ...confirmForm, confirmed_time: e.target.value })}
@@ -914,91 +973,53 @@ export default function AdminMeetingsPage() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Video className="h-4 w-4" />
-                      رابط الاجتماع (Zoom, Teams, Google Meet)
-                    </Label>
+                    <Label htmlFor="meeting_link">رابط الاجتماع (اختياري)</Label>
                     <Input
-                      placeholder="https://zoom.us/j/..."
+                      id="meeting_link"
+                      placeholder="https://meet.google.com/..."
                       value={confirmForm.meeting_link}
                       onChange={(e) => setConfirmForm({ ...confirmForm, meeting_link: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>ملاحظات للعميل (اختياري)</Label>
+                    <Label htmlFor="admin_notes">ملاحظات للعميل (اختياري)</Label>
                     <Textarea
+                      id="admin_notes"
                       placeholder="أي ملاحظات أو تعليمات للعميل..."
                       value={confirmForm.admin_notes}
                       onChange={(e) => setConfirmForm({ ...confirmForm, admin_notes: e.target.value })}
-                      rows={3}
                     />
                   </div>
                 </div>
               )}
 
-              {/* Reject Form */}
               {actionType === 'reject' && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-sm text-red-800">
-                      سيتم إلغاء هذا الطلب وإشعار العميل بالرفض
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>سبب الرفض (سيُرسل للعميل)</Label>
-                    <Textarea
-                      placeholder="مثال: عذراً، الموعد المطلوب غير متاح. يرجى اختيار موعد آخر."
-                      value={rejectForm.admin_notes}
-                      onChange={(e) => setRejectForm({ ...rejectForm, admin_notes: e.target.value })}
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* View - Show confirmed details */}
-              {actionType === 'view' && selectedMeeting.status === 'confirmed' && selectedMeeting.confirmed_date && (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg space-y-2">
-                  <p className="font-medium text-green-800">الموعد المؤكد:</p>
-                  <p className="text-sm">
-                    {format(parseISO(selectedMeeting.confirmed_date), 'EEEE d MMMM yyyy - HH:mm', { locale: ar })}
-                  </p>
-                  {selectedMeeting.meeting_link && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2 mt-2"
-                      onClick={() => window.open(selectedMeeting.meeting_link!, '_blank')}
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      فتح رابط الاجتماع
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {selectedMeeting.admin_notes && actionType === 'view' && (
-                <div className="p-4 bg-muted rounded-lg">
-                  <p className="text-xs text-muted-foreground mb-1">ملاحظات الإدارة</p>
-                  <p className="text-sm">{selectedMeeting.admin_notes}</p>
+                <div className="space-y-2">
+                  <Label htmlFor="reject_notes">سبب الرفض</Label>
+                  <Textarea
+                    id="reject_notes"
+                    placeholder="يرجى توضيح سبب رفض طلب الاجتماع..."
+                    value={rejectForm.admin_notes}
+                    onChange={(e) => setRejectForm({ admin_notes: e.target.value })}
+                  />
                 </div>
               )}
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => { resetForms(); setDialogOpen(false); }}>
-              إغلاق
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              إلغاء
             </Button>
             {actionType === 'confirm' && (
-              <Button onClick={handleConfirmMeeting} disabled={actionLoading} className="gap-2">
-                {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                تأكيد وإرسال الإشعار
+              <Button onClick={handleConfirmMeeting} disabled={actionLoading} className="bg-emerald-600 hover:bg-emerald-700">
+                {actionLoading ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <CheckCircle2 className="h-4 w-4 ml-2" />}
+                تأكيد الاجتماع
               </Button>
             )}
             {actionType === 'reject' && (
-              <Button variant="destructive" onClick={handleRejectMeeting} disabled={actionLoading} className="gap-2">
-                {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+              <Button variant="destructive" onClick={handleRejectMeeting} disabled={actionLoading}>
+                {actionLoading ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <XCircle className="h-4 w-4 ml-2" />}
                 رفض الطلب
               </Button>
             )}
@@ -1008,7 +1029,7 @@ export default function AdminMeetingsPage() {
 
       {/* Staff Assignment Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="h-5 w-5 text-primary" />
@@ -1020,19 +1041,6 @@ export default function AdminMeetingsPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {meetingToAssign && (
-              <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  <span>{meetingToAssign.organization?.name}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span>{format(parseISO(meetingToAssign.preferred_date), 'dd/MM/yyyy HH:mm', { locale: ar })}</span>
-                </div>
-              </div>
-            )}
-
             <div className="space-y-2">
               <Label>اختر الموظف *</Label>
               <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
@@ -1043,22 +1051,22 @@ export default function AdminMeetingsPage() {
                   {staffMembers.map((staff) => (
                     <SelectItem key={staff.id} value={staff.id}>
                       <div className="flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        {staff.full_name}
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback className="text-xs">{staff.full_name.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <span>{staff.full_name}</span>
                       </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-2">
               <Label>ملاحظة للموظف (اختياري)</Label>
               <Textarea
+                placeholder="أي تعليمات أو ملاحظات للموظف..."
                 value={staffNote}
                 onChange={(e) => setStaffNote(e.target.value)}
-                placeholder="أضف ملاحظة أو تعليمات للموظف..."
-                className="min-h-[80px]"
               />
             </div>
           </div>
@@ -1067,9 +1075,9 @@ export default function AdminMeetingsPage() {
             <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
               إلغاء
             </Button>
-            <Button onClick={handleAssignMeeting} disabled={!selectedStaffId || assigning}>
-              <Send className="h-4 w-4 ml-2" />
-              {assigning ? 'جاري التوجيه...' : 'توجيه الاجتماع'}
+            <Button onClick={handleAssignMeeting} disabled={assigning || !selectedStaffId}>
+              {assigning ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Send className="h-4 w-4 ml-2" />}
+              توجيه الاجتماع
             </Button>
           </DialogFooter>
         </DialogContent>
