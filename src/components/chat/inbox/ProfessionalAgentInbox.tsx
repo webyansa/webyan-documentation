@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useChat, Conversation, Message } from '@/hooks/useChat';
+import { useChat, Conversation } from '@/hooks/useChat';
 import { useAgentStatus } from '@/hooks/useAgentStatus';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
@@ -55,6 +55,21 @@ const conversationStatusConfig = {
 
 type ConversationTab = 'customers' | 'internal';
 type ConversationFilter = 'all' | 'unassigned' | 'assigned' | 'mine' | 'closed';
+type ViewMode = 'grouped' | 'list'; // New: grouped by client or flat list
+
+// Interface for grouped client data
+interface GroupedClient {
+  id: string; // organization_id or embed_token_id or sender_email hash
+  name: string;
+  email?: string;
+  logoUrl?: string;
+  conversations: Conversation[];
+  totalConversations: number;
+  activeConversations: number;
+  unreadCount: number;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+}
 
 interface StaffMember {
   id: string;
@@ -118,6 +133,8 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastMessageCount, setLastMessageCount] = useState(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('grouped');
+  const [selectedClient, setSelectedClient] = useState<GroupedClient | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -216,11 +233,76 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
     return true;
   });
 
+  // Group conversations by client/organization
+  const groupedClients = React.useMemo(() => {
+    const clientMap = new Map<string, GroupedClient>();
+    
+    // Only group customer conversations (not internal)
+    const customerConversations = filteredConversations.filter(c => c.source !== 'internal');
+    
+    customerConversations.forEach(conv => {
+      // Generate a unique client ID based on organization or metadata
+      const clientId = conv.organization_id || 
+                       conv.embed_token_id || 
+                       (conv.metadata as any)?.sender_email || 
+                       `unknown-${conv.id}`;
+      
+      const clientName = conv.organization?.name || 
+                        (conv.metadata as any)?.sender_name || 
+                        (conv.metadata as any)?.organization_name ||
+                        'زائر';
+      
+      const clientEmail = conv.organization?.contact_email || 
+                         (conv.metadata as any)?.sender_email;
+      
+      const logoUrl = conv.organization?.logo_url;
+
+      if (clientMap.has(clientId)) {
+        const existing = clientMap.get(clientId)!;
+        existing.conversations.push(conv);
+        existing.totalConversations++;
+        if (conv.status !== 'closed') existing.activeConversations++;
+        existing.unreadCount += conv.unread_count || 0;
+        
+        // Update last message if this one is newer
+        if (conv.last_message_at && (!existing.lastMessageAt || conv.last_message_at > existing.lastMessageAt)) {
+          existing.lastMessageAt = conv.last_message_at;
+          existing.lastMessagePreview = conv.last_message_preview;
+        }
+      } else {
+        clientMap.set(clientId, {
+          id: clientId,
+          name: clientName,
+          email: clientEmail,
+          logoUrl: logoUrl || undefined,
+          conversations: [conv],
+          totalConversations: 1,
+          activeConversations: conv.status !== 'closed' ? 1 : 0,
+          unreadCount: conv.unread_count || 0,
+          lastMessageAt: conv.last_message_at,
+          lastMessagePreview: conv.last_message_preview
+        });
+      }
+    });
+
+    // Sort by last message time (newest first)
+    return Array.from(clientMap.values()).sort((a, b) => {
+      if (!a.lastMessageAt && !b.lastMessageAt) return 0;
+      if (!a.lastMessageAt) return 1;
+      if (!b.lastMessageAt) return -1;
+      return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
+    });
+  }, [filteredConversations]);
+
+  // Get conversations for selected client
+  const clientConversations = selectedClient?.conversations || [];
+
   // Count badges
   const unassignedCount = conversations.filter(c => c.status === 'unassigned' && c.source !== 'internal').length;
   const customersUnread = conversations.filter(c => c.source !== 'internal' && c.unread_count > 0).length;
   const internalUnread = conversations.filter(c => c.source === 'internal' && c.unread_count > 0).length;
   const mineCount = conversations.filter(c => c.assigned_agent_id === staffId && c.status !== 'closed').length;
+  const clientsCount = groupedClients.length;
 
   const handleSendMessage = async () => {
     if (!messageText.trim() || !currentConversation) return;
@@ -486,13 +568,197 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
               ))}
             </div>
           )}
+
+          {/* View Mode Toggle */}
+          {activeTab === 'customers' && (
+            <div className="flex gap-1 border rounded-lg p-0.5">
+              <Button
+                variant={viewMode === 'grouped' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => { setViewMode('grouped'); setSelectedClient(null); }}
+              >
+                <Users className="h-3 w-3 ml-1" />
+                عملاء ({clientsCount})
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => setViewMode('list')}
+              >
+                <MessageCircle className="h-3 w-3 ml-1" />
+                محادثات
+              </Button>
+            </div>
+          )}
         </div>
 
-        {/* Conversations list */}
+        {/* Conversations/Clients list */}
         <ScrollArea className="flex-1">
           {loading && conversations.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : activeTab === 'customers' && viewMode === 'grouped' && !selectedClient ? (
+            /* Grouped Client View */
+            groupedClients.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <Users className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                <p className="text-sm">لا يوجد عملاء</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {groupedClients.map((client) => (
+                  <div
+                    key={client.id}
+                    onClick={() => {
+                      // If client has only one conversation, select it directly
+                      if (client.conversations.length === 1) {
+                        selectConversation(client.conversations[0]);
+                      } else {
+                        setSelectedClient(client);
+                      }
+                    }}
+                    className="px-3 py-3 cursor-pointer transition-all hover:bg-muted/50"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="relative flex-shrink-0">
+                        <Avatar className="h-11 w-11">
+                          {client.logoUrl && <AvatarImage src={client.logoUrl} />}
+                          <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
+                            {client.name?.charAt(0) || <Building2 className="h-4 w-4" />}
+                          </AvatarFallback>
+                        </Avatar>
+                        {client.activeConversations > 0 && (
+                          <span className="absolute -bottom-0.5 -left-0.5 h-3 w-3 rounded-full border-2 border-card bg-green-500" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <span className="font-medium text-sm truncate">{client.name}</span>
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                            {client.lastMessageAt && formatDistanceToNow(new Date(client.lastMessageAt), { 
+                              addSuffix: false, 
+                              locale: ar 
+                            })}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {client.lastMessagePreview || client.email || 'لا توجد رسائل'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <Badge variant="outline" className="h-5 text-[10px] px-1.5 bg-muted/50">
+                            <MessageCircle className="h-2.5 w-2.5 ml-0.5" />
+                            {client.totalConversations} محادثة
+                          </Badge>
+                          {client.activeConversations > 0 && (
+                            <Badge variant="outline" className="h-5 text-[10px] px-1.5 bg-green-50 text-green-600 border-green-200">
+                              {client.activeConversations} نشطة
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      {client.unreadCount > 0 && (
+                        <Badge variant="destructive" className="h-5 min-w-5 text-xs p-0 px-1.5">
+                          {client.unreadCount}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : activeTab === 'customers' && viewMode === 'grouped' && selectedClient ? (
+            /* Client's Conversations View */
+            <div>
+              {/* Back to clients header */}
+              <div className="sticky top-0 z-10 bg-card border-b px-3 py-2.5">
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setSelectedClient(null)}
+                  >
+                    <ChevronLeft className="h-4 w-4 rotate-180" />
+                  </Button>
+                  <Avatar className="h-8 w-8">
+                    {selectedClient.logoUrl && <AvatarImage src={selectedClient.logoUrl} />}
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                      {selectedClient.name?.charAt(0) || <Building2 className="h-3 w-3" />}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{selectedClient.name}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {selectedClient.totalConversations} محادثة
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="divide-y">
+                {clientConversations.map((conv) => (
+                  <div
+                    key={conv.id}
+                    onClick={() => selectConversation(conv)}
+                    className={cn(
+                      "px-3 py-3 cursor-pointer transition-all hover:bg-muted/50",
+                      currentConversation?.id === conv.id && "bg-primary/5 border-r-2 border-r-primary"
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="relative flex-shrink-0">
+                        <div className={cn(
+                          "h-9 w-9 rounded-full flex items-center justify-center",
+                          conversationStatusConfig[conv.status].bgLight
+                        )}>
+                          <MessageCircle className={cn("h-4 w-4", conversationStatusConfig[conv.status].textColor)} />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <span className="font-medium text-sm truncate">
+                            {conv.subject || 'محادثة'}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                            {conv.last_message_at && formatDistanceToNow(new Date(conv.last_message_at), { 
+                              addSuffix: false, 
+                              locale: ar 
+                            })}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {conv.last_message_preview || 'لا توجد رسائل'}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "h-5 text-[10px] px-1.5",
+                              conversationStatusConfig[conv.status].bgLight,
+                              conversationStatusConfig[conv.status].textColor
+                            )}
+                          >
+                            {conversationStatusConfig[conv.status].label}
+                          </Badge>
+                          {conv.assigned_agent && (
+                            <span className="text-[10px] text-muted-foreground truncate">
+                              {conv.assigned_agent.full_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {conv.unread_count > 0 && (
+                        <Badge variant="destructive" className="h-5 min-w-5 text-xs p-0 px-1.5">
+                          {conv.unread_count}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
@@ -500,6 +766,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
               <p className="text-sm">لا توجد محادثات</p>
             </div>
           ) : (
+            /* Standard list view */
             <div className="divide-y">
               {filteredConversations.map((conv) => (
                 <div
