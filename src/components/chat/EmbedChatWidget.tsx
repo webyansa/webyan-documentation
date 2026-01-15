@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,24 +40,69 @@ export default function EmbedChatWidget({
   const [email, setEmail] = useState(contactEmail || '');
   const [messageText, setMessageText] = useState('');
   const [initialMessage, setInitialMessage] = useState('');
+  const [isPolling, setIsPolling] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     currentConversation,
     messages,
     sending,
     startConversation,
-    sendMessage
+    sendMessage,
+    fetchMessages
   } = useChat({ embedToken, autoFetch: false });
 
+  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Notify parent of widget state
   useEffect(() => {
     window.parent.postMessage({ 
       type: isOpen ? 'WEBYAN_CHAT_OPENED' : 'WEBYAN_CHAT_CLOSED' 
     }, '*');
+  }, [isOpen]);
+
+  // Polling for new messages - faster updates for embed clients
+  const pollMessages = useCallback(async () => {
+    if (currentConversation?.id && !sending) {
+      try {
+        await fetchMessages(currentConversation.id);
+      } catch (error) {
+        console.error('Error polling messages:', error);
+      }
+    }
+  }, [currentConversation?.id, fetchMessages, sending]);
+
+  // Start/stop polling when conversation is active
+  useEffect(() => {
+    if (currentConversation?.id && isOpen) {
+      // Initial fetch
+      pollMessages();
+      
+      // Start polling every 2 seconds for faster response
+      pollingRef.current = setInterval(pollMessages, 2000);
+      setIsPolling(true);
+
+      return () => {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        setIsPolling(false);
+      };
+    }
+  }, [currentConversation?.id, isOpen, pollMessages]);
+
+  // Stop polling when widget is closed
+  useEffect(() => {
+    if (!isOpen && pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+      setIsPolling(false);
+    }
   }, [isOpen]);
 
   const handleStartChat = async () => {
@@ -68,8 +113,11 @@ export default function EmbedChatWidget({
 
   const handleSendMessage = async () => {
     if (!messageText.trim() || !currentConversation) return;
-    await sendMessage(currentConversation.id, messageText, undefined, name);
+    const msg = messageText;
     setMessageText('');
+    await sendMessage(currentConversation.id, msg, undefined, name);
+    // Immediately poll for any response
+    setTimeout(pollMessages, 500);
   };
 
   const isDark = theme === 'dark';
@@ -138,10 +186,13 @@ export default function EmbedChatWidget({
               <h3 className="font-bold text-lg">{organizationName}</h3>
               {currentConversation ? (
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`w-2 h-2 rounded-full ${statusColors[currentConversation.status]} animate-pulse`} />
+                  <span className={`w-2 h-2 rounded-full ${statusColors[currentConversation.status]} ${currentConversation.status === 'assigned' ? 'animate-pulse' : ''}`} />
                   <span className="text-sm text-white/90">
                     {statusLabels[currentConversation.status]}
                   </span>
+                  {isPolling && (
+                    <span className="text-xs text-white/60">(محدث تلقائياً)</span>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-white/80">نحن هنا لمساعدتك</p>
