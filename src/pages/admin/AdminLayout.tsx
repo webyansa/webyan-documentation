@@ -119,12 +119,14 @@ export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
+    const redirect = encodeURIComponent(`${location.pathname}${location.search}`);
+
     if (!loading && !user) {
-      navigate('/auth');
+      navigate(`/auth?redirect=${redirect}`);
     } else if (!loading && user && !isAdminOrEditor) {
       navigate('/');
     }
-  }, [user, loading, isAdminOrEditor, navigate]);
+  }, [user, loading, isAdminOrEditor, navigate, location.pathname, location.search]);
 
   const handleSignOut = async () => {
     await signOut();

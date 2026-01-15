@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Building2, Mail, Lock, Eye, EyeOff, ArrowLeft, Loader2, Shield } from 'lucide-react';
@@ -12,26 +12,29 @@ import webyanLogo from '@/assets/webyan-logo.svg';
 
 const PortalLoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const redirectParam = new URLSearchParams(location.search).get('redirect');
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast.error('يرجى إدخال البريد الإلكتروني وكلمة المرور');
       return;
     }
 
     setLoading(true);
-    
+
     try {
       // Sign in
       const { error: signInError } = await signIn(email, password);
-      
+
       if (signInError) {
         if (signInError.message.includes('Invalid login credentials')) {
           toast.error('بيانات الدخول غير صحيحة');
@@ -43,7 +46,7 @@ const PortalLoginPage = () => {
 
       // Check if user is a client
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         toast.error('حدث خطأ أثناء تسجيل الدخول');
         return;
@@ -74,8 +77,12 @@ const PortalLoginPage = () => {
         .eq('id', clientAccount.id);
 
       toast.success('تم تسجيل الدخول بنجاح');
-      navigate('/portal');
 
+      if (redirectParam && redirectParam.startsWith('/portal')) {
+        navigate(redirectParam, { replace: true });
+      } else {
+        navigate('/portal', { replace: true });
+      }
     } catch (error) {
       console.error('Login error:', error);
       toast.error('حدث خطأ أثناء تسجيل الدخول');
