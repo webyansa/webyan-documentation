@@ -1,4 +1,4 @@
-import { useState, memo } from 'react';
+import { useState, memo, forwardRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, Loader2 } from 'lucide-react';
 import * as Icons from 'lucide-react';
@@ -16,13 +16,10 @@ function getIcon(iconName: string) {
   return IconComponent ? <IconComponent className="h-5 w-5 flex-shrink-0" /> : null;
 }
 
-const SubModuleItem = memo(function SubModuleItem({
-  module,
-  subModule,
-}: {
+const SubModuleItem = memo(forwardRef<HTMLDivElement, {
   module: SidebarModule;
   subModule: SidebarSubModule;
-}) {
+}>(function SubModuleItem({ module, subModule }, ref) {
   const location = useLocation();
   const isActive = location.pathname.includes(`/${module.slug}/${subModule.slug}`);
   const [isExpanded, setIsExpanded] = useState(isActive);
@@ -46,7 +43,7 @@ const SubModuleItem = memo(function SubModuleItem({
   }
 
   return (
-    <div>
+    <div ref={ref}>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
@@ -85,15 +82,15 @@ const SubModuleItem = memo(function SubModuleItem({
       )}
     </div>
   );
-});
+}));
 
-const ModuleItem = memo(function ModuleItem({ module }: { module: SidebarModule }) {
+const ModuleItem = memo(forwardRef<HTMLDivElement, { module: SidebarModule }>(function ModuleItem({ module }, ref) {
   const location = useLocation();
   const isActive = location.pathname.includes(`/${module.slug}`);
   const [isExpanded, setIsExpanded] = useState(isActive);
 
   return (
-    <div className="mb-0.5">
+    <div ref={ref} className="mb-0.5">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
@@ -125,8 +122,7 @@ const ModuleItem = memo(function ModuleItem({ module }: { module: SidebarModule 
       )}
     </div>
   );
-});
-
+}));
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { modules, loading } = useSidebarData();
 

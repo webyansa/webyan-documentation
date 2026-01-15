@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, createContext, useContext, ReactNode, useRef, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -34,8 +34,18 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isStaff, setIsStaff] = useState(false);
   const [permissions, setPermissions] = useState<StaffPermissions>(defaultPermissions);
+  const initializedRef = useRef(false);
+  const permissionsCache = useRef<Map<string, { isStaff: boolean; permissions: StaffPermissions }>>(new Map());
 
-  const fetchStaffPermissions = async (userId: string) => {
+  const fetchStaffPermissions = useCallback(async (userId: string) => {
+    // Check cache first
+    if (permissionsCache.current.has(userId)) {
+      const cached = permissionsCache.current.get(userId)!;
+      setIsStaff(cached.isStaff);
+      setPermissions(cached.permissions);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .rpc('get_staff_permissions', { _user_id: userId });
@@ -44,72 +54,92 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
         console.error('Error fetching staff permissions:', error);
         setIsStaff(false);
         setPermissions(defaultPermissions);
+        permissionsCache.current.set(userId, { isStaff: false, permissions: defaultPermissions });
         return;
       }
 
       if (data && data.length > 0) {
         const staffData = data[0];
-        setIsStaff(true);
-        setPermissions({
+        const perms = {
           staffId: staffData.staff_id,
           canReplyTickets: staffData.can_reply_tickets,
           canManageContent: staffData.can_manage_content,
           canAttendMeetings: staffData.can_attend_meetings,
-        });
+        };
+        setIsStaff(true);
+        setPermissions(perms);
+        permissionsCache.current.set(userId, { isStaff: true, permissions: perms });
       } else {
         setIsStaff(false);
         setPermissions(defaultPermissions);
+        permissionsCache.current.set(userId, { isStaff: false, permissions: defaultPermissions });
       }
     } catch (error) {
       console.error('Error fetching staff permissions:', error);
       setIsStaff(false);
       setPermissions(defaultPermissions);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    // Prevent double initialization
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     let mounted = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+    const initializeAuth = async () => {
+      try {
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        
         if (!mounted) return;
         
-        setSession(session);
-        setUser(session?.user ?? null);
+        setSession(initialSession);
+        setUser(initialSession?.user ?? null);
         
-        if (session?.user) {
-          await fetchStaffPermissions(session.user.id);
-        } else {
-          setIsStaff(false);
-          setPermissions(defaultPermissions);
+        if (initialSession?.user) {
+          await fetchStaffPermissions(initialSession.user.id);
         }
         
         if (mounted) {
           setLoading(false);
         }
+      } catch (error) {
+        console.error('Error initializing staff auth:', error);
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, newSession) => {
+        if (!mounted) return;
+        
+        if (event === 'SIGNED_OUT') {
+          setSession(null);
+          setUser(null);
+          setIsStaff(false);
+          setPermissions(defaultPermissions);
+          permissionsCache.current.clear();
+        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          setSession(newSession);
+          setUser(newSession?.user ?? null);
+          
+          if (newSession?.user) {
+            await fetchStaffPermissions(newSession.user.id);
+          }
+        }
       }
     );
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted) return;
-      
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        await fetchStaffPermissions(session.user.id);
-      }
-      
-      if (mounted) {
-        setLoading(false);
-      }
-    });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [fetchStaffPermissions]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -120,6 +150,7 @@ export function StaffAuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    permissionsCache.current.clear();
     await supabase.auth.signOut();
     setIsStaff(false);
     setPermissions(defaultPermissions);
