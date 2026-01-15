@@ -409,8 +409,16 @@ serve(async (req) => {
           `)
           .order('last_message_at', { ascending: false, nullsFirst: false });
 
+        // Admins/editors: all conversations
+        if (canManageAllConversations) {
+          // no filter
+        }
+        // Staff (not admin): assigned to them OR unassigned (so they can pick)
+        else if (canAgentAct && staffId) {
+          query = query.or(`assigned_agent_id.eq.${staffId},status.eq.unassigned`);
+        }
         // Clients: only their organization
-        if (!canManageAllConversations && !canAgentAct && organizationId) {
+        else if (organizationId) {
           query = query.eq('organization_id', organizationId);
         }
 
