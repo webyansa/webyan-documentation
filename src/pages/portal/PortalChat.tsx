@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useChat, Conversation, Message } from '@/hooks/useChat';
 import { supabase } from '@/integrations/supabase/client';
+import { CustomerChatWidget } from '@/components/chat/messenger/CustomerChatWidget';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,9 +9,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   MessageCircle, Send, Plus, ArrowLeft, Loader2, 
-  User, Clock, CheckCheck, Check, Search, X
+  User, Clock, CheckCheck, Check, Search, X, CheckCircle
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -100,134 +102,178 @@ const PortalChat = () => {
   });
 
   const activeCount = conversations.filter(c => c.status !== 'closed').length;
+  const closedCount = conversations.filter(c => c.status === 'closed').length;
   const unreadCount = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
 
   // Conversation List View
   if (!currentConversation) {
     return (
-      <div className="h-[calc(100vh-120px)] flex flex-col">
+      <div className="space-y-6">
         {/* Header */}
-        <div className="flex-shrink-0 p-6 border-b bg-card">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <MessageCircle className="h-6 w-6 text-primary" />
+            المحادثات
+          </h1>
+          <p className="text-muted-foreground">تواصل مباشر مع فريق الدعم</p>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="p-3 rounded-full bg-primary/10">
                 <MessageCircle className="h-6 w-6 text-primary" />
-                المحادثات
-              </h1>
-              <p className="text-muted-foreground text-sm">تواصل مباشر مع فريق الدعم</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{conversations.length}</p>
+                <p className="text-sm text-muted-foreground">إجمالي المحادثات</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="p-3 rounded-full bg-green-100">
+                <Clock className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{activeCount}</p>
+                <p className="text-sm text-muted-foreground">محادثات نشطة</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="p-3 rounded-full bg-gray-100">
+                <CheckCircle className="h-6 w-6 text-gray-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{closedCount}</p>
+                <p className="text-sm text-muted-foreground">محادثات مكتملة</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {unreadCount > 0 && (
+            <Card className="border-red-200 bg-red-50">
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="p-3 rounded-full bg-red-100">
+                  <MessageCircle className="h-6 w-6 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-red-600">{unreadCount}</p>
+                  <p className="text-sm text-red-600/70">رسائل غير مقروءة</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Conversations Card */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div>
+              <CardTitle>محادثاتك</CardTitle>
+              <CardDescription>جميع محادثاتك مع فريق الدعم</CardDescription>
             </div>
             <Button onClick={() => setShowNewChat(true)} className="gap-2">
               <Plus className="h-4 w-4" />
               محادثة جديدة
             </Button>
-          </div>
-
-          {/* Stats */}
-          <div className="flex gap-4">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="w-2 h-2 rounded-full bg-green-500" />
-              <span className="text-muted-foreground">{activeCount} نشطة</span>
-            </div>
-            {unreadCount > 0 && (
-              <div className="flex items-center gap-2 text-sm">
-                <Badge variant="destructive" className="h-5 min-w-5 text-xs">
-                  {unreadCount}
-                </Badge>
-                <span className="text-muted-foreground">غير مقروءة</span>
+          </CardHeader>
+          <CardContent>
+            {/* Search */}
+            {conversations.length > 0 && (
+              <div className="relative mb-4">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="البحث في المحادثات..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-10"
+                />
               </div>
             )}
-          </div>
 
-          {/* Search */}
-          {conversations.length > 0 && (
-            <div className="relative mt-4">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="البحث في المحادثات..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-10"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Conversations List */}
-        <ScrollArea className="flex-1">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : filteredConversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 px-4">
-              <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <MessageCircle className="h-12 w-12 text-primary/50" />
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
-              <h3 className="text-lg font-medium mb-2">لا توجد محادثات</h3>
-              <p className="text-muted-foreground text-center mb-4">
-                ابدأ محادثة جديدة للتواصل مع فريق الدعم
-              </p>
-              <Button onClick={() => setShowNewChat(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
-                بدء محادثة
-              </Button>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {filteredConversations.map((conv) => (
-                <div
-                  key={conv.id}
-                  onClick={() => selectConversation(conv)}
-                  className="px-6 py-4 flex items-start gap-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                >
-                  <div className="relative">
-                    <Avatar className="h-12 w-12">
-                      <AvatarFallback className="bg-primary/10 text-primary">
-                        {conv.assigned_agent?.full_name?.charAt(0) || 'D'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className={cn(
-                      "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background",
-                      statusLabels[conv.status].dot
-                    )} />
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <h3 className="font-medium truncate">{conv.subject || 'محادثة'}</h3>
-                      <span className="text-xs text-muted-foreground flex-shrink-0">
-                        {conv.last_message_at && formatDistanceToNow(new Date(conv.last_message_at), { 
-                          addSuffix: true, 
-                          locale: ar 
-                        })}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate mb-2">
-                      {conv.last_message_preview || 'لا توجد رسائل'}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Badge className={statusLabels[conv.status].color}>
-                        {statusLabels[conv.status].label}
-                      </Badge>
-                      {conv.assigned_agent && (
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <User className="h-3 w-3" />
-                          {conv.assigned_agent.full_name}
-                        </span>
+            ) : filteredConversations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-4">
+                <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <MessageCircle className="h-12 w-12 text-primary/50" />
+                </div>
+                <h3 className="text-lg font-medium mb-2">لا توجد محادثات</h3>
+                <p className="text-muted-foreground text-center mb-4">
+                  ابدأ محادثة جديدة للتواصل مع فريق الدعم
+                </p>
+                <Button onClick={() => setShowNewChat(true)} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  بدء محادثة
+                </Button>
+              </div>
+            ) : (
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-2">
+                  {filteredConversations.map((conv) => (
+                    <div
+                      key={conv.id}
+                      onClick={() => selectConversation(conv)}
+                      className="p-4 flex items-center gap-4 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
+                    >
+                      <div className="relative">
+                        <Avatar className="h-12 w-12">
+                          <AvatarFallback className="bg-primary/10 text-primary">
+                            {conv.assigned_agent?.full_name?.charAt(0) || 'D'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className={cn(
+                          "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background",
+                          statusLabels[conv.status].dot
+                        )} />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <h3 className="font-medium truncate">{conv.subject || 'محادثة'}</h3>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">
+                            {conv.last_message_at && formatDistanceToNow(new Date(conv.last_message_at), { 
+                              addSuffix: true, 
+                              locale: ar 
+                            })}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate mb-2">
+                          {conv.last_message_preview || 'لا توجد رسائل'}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Badge className={statusLabels[conv.status].color}>
+                            {statusLabels[conv.status].label}
+                          </Badge>
+                          {conv.assigned_agent && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              {conv.assigned_agent.full_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {conv.unread_count > 0 && (
+                        <Badge variant="destructive" className="h-6 min-w-6 text-sm flex items-center justify-center">
+                          {conv.unread_count}
+                        </Badge>
                       )}
                     </div>
-                  </div>
-
-                  {conv.unread_count > 0 && (
-                    <Badge variant="destructive" className="h-6 min-w-6 text-sm flex items-center justify-center">
-                      {conv.unread_count}
-                    </Badge>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </ScrollArea>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
 
         {/* New Chat Dialog */}
         <Dialog open={showNewChat} onOpenChange={setShowNewChat}>
@@ -271,15 +317,18 @@ const PortalChat = () => {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Customer Chat Widget - Floating */}
+        <CustomerChatWidget />
       </div>
     );
   }
 
   // Conversation View
   return (
-    <div className="h-[calc(100vh-120px)] flex flex-col bg-background">
+    <div className="h-[calc(100vh-120px)] flex flex-col bg-background rounded-lg border shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b flex items-center justify-between bg-card shadow-sm">
+      <div className="flex-shrink-0 p-4 border-b flex items-center justify-between bg-card">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => setCurrentConversation(null)}>
             <ArrowLeft className="h-5 w-5" />
