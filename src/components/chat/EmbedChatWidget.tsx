@@ -92,19 +92,8 @@ export default function EmbedChatWidget({
   const inputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Generate or retrieve a unique session ID for this embed user
-  const getSessionId = () => {
-    const storageKey = `webyan_chat_session_${embedToken}`;
-    const stored = localStorage.getItem(storageKey);
-    if (stored) return stored;
-    const newId = `embed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    localStorage.setItem(storageKey, newId);
-    return newId;
-  };
-  const sessionId = useRef(getSessionId());
-  
-  // Conversation persistence key
-  const conversationStorageKey = `webyan_chat_conversation_${embedToken}`;
+  // Generate a unique session ID for this embed user
+  const sessionId = useRef(`embed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
 
   // Notification sound hook
   const { playNotificationSound } = useNotificationSound();
@@ -128,39 +117,8 @@ export default function EmbedChatWidget({
     sending,
     startConversation,
     sendMessage,
-    fetchMessages,
-    restoreConversation,
-    setCurrentConversation
+    fetchMessages
   } = useChat({ embedToken, autoFetch: false });
-
-  // State to track if we've tried to restore
-  const [restorationAttempted, setRestorationAttempted] = useState(false);
-
-  // Restore conversation from localStorage on mount
-  useEffect(() => {
-    const tryRestoreConversation = async () => {
-      const storedConversationId = localStorage.getItem(conversationStorageKey);
-      if (storedConversationId && !currentConversation && !restorationAttempted) {
-        setRestorationAttempted(true);
-        const restored = await restoreConversation(storedConversationId);
-        if (!restored) {
-          // Conversation expired or closed, clear storage
-          localStorage.removeItem(conversationStorageKey);
-        }
-      } else {
-        setRestorationAttempted(true);
-      }
-    };
-    
-    tryRestoreConversation();
-  }, [conversationStorageKey, restoreConversation, currentConversation, restorationAttempted]);
-
-  // Save conversation ID to localStorage when a new conversation is started
-  useEffect(() => {
-    if (currentConversation?.id) {
-      localStorage.setItem(conversationStorageKey, currentConversation.id);
-    }
-  }, [currentConversation?.id, conversationStorageKey]);
 
   // Typing indicator hook
   const { typingUsers, handleTyping, stopTyping } = useTypingIndicator({
@@ -308,11 +266,11 @@ export default function EmbedChatWidget({
         .from('chat-attachments')
         .getPublicUrl(filePath);
 
-      // Send message with image in attachments array
+      // Send message with image
       await sendMessage(
         currentConversation.id, 
-        '📷 صورة مرفقة', 
-        [publicUrl], 
+        `📷 صورة مرفقة\n${publicUrl}`, 
+        undefined, 
         name
       );
       setTimeout(pollMessages, 500);

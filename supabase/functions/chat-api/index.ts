@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface ChatRequest {
-  action: 'start_conversation' | 'send_message' | 'get_messages' | 'get_conversations' | 'get_conversation' | 'mark_read' | 'assign' | 'close' | 'reopen' | 'convert_to_ticket';
+  action: 'start_conversation' | 'send_message' | 'get_messages' | 'get_conversations' | 'mark_read' | 'assign' | 'close' | 'reopen' | 'convert_to_ticket';
   conversationId?: string;
   message?: string;
   attachments?: string[];
@@ -713,54 +713,6 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ ticket }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      case 'get_conversation': {
-        if (!body.conversationId) {
-          return new Response(
-            JSON.stringify({ error: 'Conversation ID required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Get conversation with relations
-        const { data: conversation, error } = await supabase
-          .from('conversations')
-          .select(`
-            *,
-            organization:client_organizations(id, name, contact_email, logo_url),
-            assigned_agent:staff_members(id, full_name, agent_status)
-          `)
-          .eq('id', body.conversationId)
-          .single();
-
-        if (error || !conversation) {
-          return new Response(
-            JSON.stringify({ error: 'Conversation not found' }),
-            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Verify access for embed tokens
-        if (embedTokenId && conversation.embed_token_id !== embedTokenId) {
-          return new Response(
-            JSON.stringify({ error: 'Access denied' }),
-            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Verify access for clients
-        if (!canManageAllConversations && !canAgentAct && conversation.organization_id !== organizationId) {
-          return new Response(
-            JSON.stringify({ error: 'Access denied' }),
-            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        return new Response(
-          JSON.stringify({ conversation }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

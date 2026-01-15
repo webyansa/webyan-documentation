@@ -24,11 +24,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
-  const [roleLoading, setRoleLoading] = useState(false);
 
   const fetchUserRole = async (userId: string) => {
     try {
-      setRoleLoading(true);
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
@@ -44,60 +42,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error fetching user role:', error);
       return null;
-    } finally {
-      setRoleLoading(false);
     }
   };
 
   useEffect(() => {
-    let mounted = true;
-
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return;
-        
+      (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         
+        // Defer role fetching to avoid deadlock
         if (session?.user) {
-          const userRole = await fetchUserRole(session.user.id);
-          if (mounted) {
-            setRole(userRole);
-          }
+          setTimeout(() => {
+            fetchUserRole(session.user.id).then(setRole);
+          }, 0);
         } else {
           setRole(null);
         }
         
-        if (mounted) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted) return;
-      
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        const userRole = await fetchUserRole(session.user.id);
-        if (mounted) {
-          setRole(userRole);
-        }
+        fetchUserRole(session.user.id).then(setRole);
       }
       
-      if (mounted) {
-        setLoading(false);
-      }
+      setLoading(false);
     });
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {

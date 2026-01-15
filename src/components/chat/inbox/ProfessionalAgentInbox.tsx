@@ -21,13 +21,12 @@ import {
   UserPlus, X, RotateCcw, Ticket, Circle, Search, Users, Inbox,
   Phone, Mail, ExternalLink, Loader2, Plus, ChevronLeft, Tag,
   MoreHorizontal, ArrowUpRight, StickyNote, AlertTriangle, Clock,
-  Paperclip, Smile, Volume2, VolumeX, Image as ImageIcon
+  Paperclip, Smile, Volume2, VolumeX
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { TypingIndicator } from '../messenger/TypingIndicator';
-import ImagePreviewModal from '../ImagePreviewModal';
 
 const statusColors = {
   available: 'bg-green-500',
@@ -111,7 +110,6 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastMessageCount, setLastMessageCount] = useState(0);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -348,16 +346,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
 
   return (
-    <>
-      {/* Image Preview Modal */}
-      {selectedImage && (
-        <ImagePreviewModal
-          imageUrl={selectedImage}
-          onClose={() => setSelectedImage(null)}
-        />
-      )}
-
-      <div className="h-[calc(100vh-120px)] flex border rounded-xl overflow-hidden bg-background shadow-sm">
+    <div className="h-[calc(100vh-120px)] flex border rounded-xl overflow-hidden bg-background shadow-sm">
       {/* Column 1: Conversations List */}
       <div className={cn(
         "w-80 border-l flex flex-col bg-card",
@@ -755,37 +744,19 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                             <p className="whitespace-pre-wrap">{msg.body}</p>
                             
                             {msg.attachments && msg.attachments.length > 0 && (
-                              <div className="mt-2 space-y-2">
-                                {msg.attachments.map((url, i) => {
-                                  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
-                                  if (isImage) {
-                                    return (
-                                      <div 
-                                        key={i}
-                                        className="cursor-pointer rounded-lg overflow-hidden"
-                                        onClick={() => setSelectedImage(url)}
-                                      >
-                                        <img 
-                                          src={url} 
-                                          alt={`مرفق ${i + 1}`}
-                                          className="max-w-full h-auto max-h-48 object-cover rounded-lg hover:opacity-90 transition-opacity"
-                                        />
-                                      </div>
-                                    );
-                                  }
-                                  return (
-                                    <a 
-                                      key={i} 
-                                      href={url} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="text-xs underline opacity-80 hover:opacity-100 flex items-center gap-1"
-                                    >
-                                      <Paperclip className="h-3 w-3" />
-                                      مرفق {i + 1}
-                                    </a>
-                                  );
-                                })}
+                              <div className="mt-2 space-y-1">
+                                {msg.attachments.map((url, i) => (
+                                  <a 
+                                    key={i} 
+                                    href={url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-xs underline opacity-80 hover:opacity-100 flex items-center gap-1"
+                                  >
+                                    <Paperclip className="h-3 w-3" />
+                                    مرفق {i + 1}
+                                  </a>
+                                ))}
                               </div>
                             )}
                           </div>
@@ -1141,6 +1112,5 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
         </DialogContent>
       </Dialog>
     </div>
-    </>
   );
 }
