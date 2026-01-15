@@ -3,7 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { 
   Code2, Copy, Check, Plus, Trash2, RefreshCw, Globe, Calendar, 
   Eye, EyeOff, AlertCircle, ExternalLink, FileCode, Loader2, 
-  Shield, Clock, Activity, HelpCircle, Building2, MessageCircle
+  Shield, Clock, Activity, HelpCircle, Building2, MessageCircle,
+  Palette, MessageSquare, Sparkles
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -32,6 +34,10 @@ interface EmbedToken {
   created_at: string;
   usage_count: number;
   last_used_at: string | null;
+  welcome_message?: string;
+  default_message?: string;
+  primary_color?: string;
+  secondary_color?: string;
   organization?: { id: string; name: string };
 }
 
@@ -40,21 +46,51 @@ interface Organization {
   name: string;
 }
 
+// Professional preset welcome messages
+const welcomePresets = [
+  { label: 'ترحيب ودي', text: 'مرحباً بك! 👋 يسعدنا التواصل معك. فريق الدعم الفني جاهز لمساعدتك.' },
+  { label: 'ترحيب رسمي', text: 'أهلاً وسهلاً بك في خدمة الدعم الفني. نحن هنا لمساعدتك في أي استفسار.' },
+  { label: 'ترحيب حماسي', text: '🌟 مرحباً! نحن متحمسون لمساعدتك. فريقنا المتميز جاهز للإجابة على جميع استفساراتك!' },
+  { label: 'ترحيب مختصر', text: 'مرحباً! كيف يمكننا مساعدتك اليوم؟' },
+];
+
+const defaultMessagePresets = [
+  { label: 'استفسار عام', text: 'مرحباً، أحتاج المساعدة بخصوص...' },
+  { label: 'مشكلة تقنية', text: 'مرحباً، أواجه مشكلة تقنية وأحتاج مساعدتكم في حلها.' },
+  { label: 'استفسار حول الخدمات', text: 'مرحباً، أريد الاستفسار عن الخدمات المتاحة والأسعار.' },
+  { label: 'متابعة طلب', text: 'مرحباً، أريد متابعة طلب سابق رقم...' },
+  { label: 'اقتراح أو شكوى', text: 'مرحباً، لدي اقتراح/ملاحظة أود مشاركتها معكم.' },
+];
+
 export default function ChatEmbedSettingsPage() {
   const [tokens, setTokens] = useState<EmbedToken[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [selectedToken, setSelectedToken] = useState<EmbedToken | null>(null);
+  const [activeTab, setActiveTab] = useState('codes');
   
   const [newToken, setNewToken] = useState({
     name: '',
     organization_id: '',
     allowed_domains: '',
     expires_days: '0',
-    allow_any_domain: true
+    allow_any_domain: true,
+    welcome_message: welcomePresets[0].text,
+    default_message: defaultMessagePresets[0].text,
+    primary_color: '#263c84',
+    secondary_color: '#24c2ec'
+  });
+
+  // Edit state for selected token
+  const [editSettings, setEditSettings] = useState({
+    welcome_message: '',
+    default_message: '',
+    primary_color: '#263c84',
+    secondary_color: '#24c2ec'
   });
 
   const baseUrl = window.location.origin;
@@ -62,6 +98,17 @@ export default function ChatEmbedSettingsPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (selectedToken) {
+      setEditSettings({
+        welcome_message: selectedToken.welcome_message || welcomePresets[0].text,
+        default_message: selectedToken.default_message || defaultMessagePresets[0].text,
+        primary_color: selectedToken.primary_color || '#263c84',
+        secondary_color: selectedToken.secondary_color || '#24c2ec'
+      });
+    }
+  }, [selectedToken]);
 
   const fetchData = async () => {
     try {
@@ -122,20 +169,70 @@ export default function ChatEmbedSettingsPage() {
           organization_id: newToken.organization_id,
           allowed_domains: domains,
           expires_at: expiresAt,
-          is_active: true
+          is_active: true,
+          welcome_message: newToken.welcome_message,
+          default_message: newToken.default_message,
+          primary_color: newToken.primary_color,
+          secondary_color: newToken.secondary_color
         });
 
       if (error) throw error;
 
       toast.success('تم إنشاء رمز تضمين الدردشة بنجاح');
       setShowCreateDialog(false);
-      setNewToken({ name: '', organization_id: '', allowed_domains: '', expires_days: '0', allow_any_domain: true });
+      setNewToken({ 
+        name: '', 
+        organization_id: '', 
+        allowed_domains: '', 
+        expires_days: '0', 
+        allow_any_domain: true,
+        welcome_message: welcomePresets[0].text,
+        default_message: defaultMessagePresets[0].text,
+        primary_color: '#263c84',
+        secondary_color: '#24c2ec'
+      });
       fetchData();
     } catch (error) {
       console.error('Error creating token:', error);
       toast.error('فشل في إنشاء الرمز');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    if (!selectedToken) return;
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('embed_tokens')
+        .update({
+          welcome_message: editSettings.welcome_message,
+          default_message: editSettings.default_message,
+          primary_color: editSettings.primary_color,
+          secondary_color: editSettings.secondary_color
+        })
+        .eq('id', selectedToken.id);
+
+      if (error) throw error;
+
+      toast.success('تم حفظ الإعدادات بنجاح');
+      
+      // Update local state
+      setSelectedToken({
+        ...selectedToken,
+        welcome_message: editSettings.welcome_message,
+        default_message: editSettings.default_message,
+        primary_color: editSettings.primary_color,
+        secondary_color: editSettings.secondary_color
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error('فشل في حفظ الإعدادات');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -272,39 +369,142 @@ window.addEventListener('message',function(e){
               إنشاء رمز جديد
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>إنشاء رمز تضمين دردشة جديد</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>اسم الرمز *</Label>
-                <Input
-                  placeholder="مثال: موقع الجمعية الرئيسي"
-                  value={newToken.name}
-                  onChange={(e) => setNewToken({ ...newToken, name: e.target.value })}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label>المنظمة *</Label>
-                <Select 
-                  value={newToken.organization_id}
-                  onValueChange={(value) => setNewToken({ ...newToken, organization_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر المنظمة" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {organizations.map(org => (
-                      <SelectItem key={org.id} value={org.id}>
-                        {org.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="space-y-6 py-4">
+              {/* Basic Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>اسم الرمز *</Label>
+                  <Input
+                    placeholder="مثال: موقع الجمعية الرئيسي"
+                    value={newToken.name}
+                    onChange={(e) => setNewToken({ ...newToken, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>المنظمة *</Label>
+                  <Select 
+                    value={newToken.organization_id}
+                    onValueChange={(value) => setNewToken({ ...newToken, organization_id: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر المنظمة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {organizations.map(org => (
+                        <SelectItem key={org.id} value={org.id}>
+                          {org.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
+              <Separator />
+
+              {/* Welcome Message */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-cyan-500" />
+                  رسالة الترحيب
+                </Label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {welcomePresets.map((preset, idx) => (
+                    <Badge
+                      key={idx}
+                      variant={newToken.welcome_message === preset.text ? 'default' : 'outline'}
+                      className="cursor-pointer hover:bg-primary/10"
+                      onClick={() => setNewToken({ ...newToken, welcome_message: preset.text })}
+                    >
+                      {preset.label}
+                    </Badge>
+                  ))}
+                </div>
+                <Textarea
+                  value={newToken.welcome_message}
+                  onChange={(e) => setNewToken({ ...newToken, welcome_message: e.target.value })}
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
+
+              {/* Default Message */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-cyan-500" />
+                  رسالة البدء الافتراضية
+                </Label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {defaultMessagePresets.map((preset, idx) => (
+                    <Badge
+                      key={idx}
+                      variant={newToken.default_message === preset.text ? 'default' : 'outline'}
+                      className="cursor-pointer hover:bg-primary/10"
+                      onClick={() => setNewToken({ ...newToken, default_message: preset.text })}
+                    >
+                      {preset.label}
+                    </Badge>
+                  ))}
+                </div>
+                <Textarea
+                  value={newToken.default_message}
+                  onChange={(e) => setNewToken({ ...newToken, default_message: e.target.value })}
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
+
+              <Separator />
+
+              {/* Colors */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-cyan-500" />
+                  ألوان العلامة التجارية
+                </Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">اللون الأساسي</Label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={newToken.primary_color}
+                        onChange={(e) => setNewToken({ ...newToken, primary_color: e.target.value })}
+                        className="h-10 w-14 rounded border cursor-pointer"
+                      />
+                      <Input
+                        value={newToken.primary_color}
+                        onChange={(e) => setNewToken({ ...newToken, primary_color: e.target.value })}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">اللون الثانوي</Label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={newToken.secondary_color}
+                        onChange={(e) => setNewToken({ ...newToken, secondary_color: e.target.value })}
+                        className="h-10 w-14 rounded border cursor-pointer"
+                      />
+                      <Input
+                        value={newToken.secondary_color}
+                        onChange={(e) => setNewToken({ ...newToken, secondary_color: e.target.value })}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Domain Settings */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                   <div className="flex items-center gap-3">
@@ -371,10 +571,10 @@ window.addEventListener('message',function(e){
           <Card>
             <CardHeader>
               <CardTitle className="text-base">رموز التضمين</CardTitle>
-              <CardDescription>اختر رمزاً لعرض أكواد التضمين</CardDescription>
+              <CardDescription>اختر رمزاً لعرض الإعدادات والأكواد</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="h-[400px]">
+              <ScrollArea className="h-[500px]">
                 {tokens.length === 0 ? (
                   <div className="p-6 text-center text-muted-foreground">
                     <MessageCircle className="h-12 w-12 mx-auto mb-3 opacity-20" />
@@ -412,7 +612,7 @@ window.addEventListener('message',function(e){
           </Card>
         </div>
 
-        {/* Code Display */}
+        {/* Settings & Code Display */}
         <div className="lg:col-span-2">
           {selectedToken ? (
             <Card>
@@ -439,113 +639,246 @@ window.addEventListener('message',function(e){
                 </div>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="floating" className="space-y-4">
-                  <TabsList className="grid grid-cols-3">
-                    <TabsTrigger value="floating">زر عائم</TabsTrigger>
-                    <TabsTrigger value="inline">تضمين مباشر</TabsTrigger>
-                    <TabsTrigger value="iframe">iFrame</TabsTrigger>
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+                  <TabsList className="grid grid-cols-4">
+                    <TabsTrigger value="codes">أكواد التضمين</TabsTrigger>
+                    <TabsTrigger value="messages">الرسائل</TabsTrigger>
+                    <TabsTrigger value="colors">الألوان</TabsTrigger>
+                    <TabsTrigger value="preview">معاينة</TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="floating" className="space-y-4">
-                    <Alert>
-                      <MessageCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        زر دردشة عائم مثل Intercom - يظهر في زاوية الشاشة ويفتح نافذة دردشة عند النقر
-                      </AlertDescription>
-                    </Alert>
-                    <div className="relative">
-                      <pre className="bg-muted p-4 rounded-lg text-xs overflow-auto max-h-80 text-left" dir="ltr">
-                        {getFloatingButtonCode(selectedToken.token)}
-                      </pre>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="absolute top-2 left-2"
-                        onClick={() => copyToClipboard(getFloatingButtonCode(selectedToken.token), 'floating')}
-                      >
-                        {copiedField === 'floating' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      </Button>
+                  {/* Embed Codes Tab */}
+                  <TabsContent value="codes" className="space-y-4">
+                    <Tabs defaultValue="floating">
+                      <TabsList className="grid grid-cols-3 w-full">
+                        <TabsTrigger value="floating">زر عائم</TabsTrigger>
+                        <TabsTrigger value="inline">تضمين مباشر</TabsTrigger>
+                        <TabsTrigger value="iframe">iFrame</TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="floating" className="space-y-4 mt-4">
+                        <Alert>
+                          <MessageCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            زر دردشة عائم مثل Intercom - يظهر في زاوية الشاشة
+                          </AlertDescription>
+                        </Alert>
+                        <div className="relative">
+                          <pre className="bg-muted p-4 rounded-lg text-xs overflow-auto max-h-60 text-left" dir="ltr">
+                            {getFloatingButtonCode(selectedToken.token)}
+                          </pre>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="absolute top-2 left-2"
+                            onClick={() => copyToClipboard(getFloatingButtonCode(selectedToken.token), 'floating')}
+                          >
+                            {copiedField === 'floating' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="inline" className="space-y-4 mt-4">
+                        <Alert>
+                          <Code2 className="h-4 w-4" />
+                          <AlertDescription>
+                            تضمين نافذة الدردشة داخل صفحة معينة
+                          </AlertDescription>
+                        </Alert>
+                        <div className="relative">
+                          <pre className="bg-muted p-4 rounded-lg text-xs overflow-auto max-h-40 text-left" dir="ltr">
+                            {getInlineCode(selectedToken.token)}
+                          </pre>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="absolute top-2 left-2"
+                            onClick={() => copyToClipboard(getInlineCode(selectedToken.token), 'inline')}
+                          >
+                            {copiedField === 'inline' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="iframe" className="space-y-4 mt-4">
+                        <div className="relative">
+                          <pre className="bg-muted p-4 rounded-lg text-xs overflow-auto max-h-32 text-left" dir="ltr">
+                            {getIframeCode(selectedToken.token)}
+                          </pre>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="absolute top-2 left-2"
+                            onClick={() => copyToClipboard(getIframeCode(selectedToken.token), 'iframe')}
+                          >
+                            {copiedField === 'iframe' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+
+                    <Separator className="my-4" />
+
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">رابط التضمين المباشر:</span>
+                      <div className="flex items-center gap-2">
+                        <code className="bg-muted px-2 py-1 rounded text-xs max-w-48 truncate">
+                          {getChatEmbedUrl(selectedToken.token)}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => copyToClipboard(getChatEmbedUrl(selectedToken.token), 'url')}
+                        >
+                          {copiedField === 'url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => window.open(getChatEmbedUrl(selectedToken.token), '_blank')}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="inline" className="space-y-4">
-                    <Alert>
-                      <Code2 className="h-4 w-4" />
-                      <AlertDescription>
-                        تضمين نافذة الدردشة داخل صفحة معينة (مثل صفحة "تواصل معنا")
-                      </AlertDescription>
-                    </Alert>
-                    <div className="relative">
-                      <pre className="bg-muted p-4 rounded-lg text-xs overflow-auto max-h-60 text-left" dir="ltr">
-                        {getInlineCode(selectedToken.token)}
-                      </pre>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="absolute top-2 left-2"
-                        onClick={() => copyToClipboard(getInlineCode(selectedToken.token), 'inline')}
-                      >
-                        {copiedField === 'inline' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      </Button>
+                  {/* Messages Tab */}
+                  <TabsContent value="messages" className="space-y-6">
+                    <div className="space-y-3">
+                      <Label className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-cyan-500" />
+                        رسالة الترحيب
+                      </Label>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {welcomePresets.map((preset, idx) => (
+                          <Badge
+                            key={idx}
+                            variant={editSettings.welcome_message === preset.text ? 'default' : 'outline'}
+                            className="cursor-pointer hover:bg-primary/10"
+                            onClick={() => setEditSettings({ ...editSettings, welcome_message: preset.text })}
+                          >
+                            {preset.label}
+                          </Badge>
+                        ))}
+                      </div>
+                      <Textarea
+                        value={editSettings.welcome_message}
+                        onChange={(e) => setEditSettings({ ...editSettings, welcome_message: e.target.value })}
+                        rows={3}
+                        className="resize-none"
+                      />
                     </div>
+
+                    <div className="space-y-3">
+                      <Label className="flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-cyan-500" />
+                        رسالة البدء الافتراضية
+                      </Label>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {defaultMessagePresets.map((preset, idx) => (
+                          <Badge
+                            key={idx}
+                            variant={editSettings.default_message === preset.text ? 'default' : 'outline'}
+                            className="cursor-pointer hover:bg-primary/10"
+                            onClick={() => setEditSettings({ ...editSettings, default_message: preset.text })}
+                          >
+                            {preset.label}
+                          </Badge>
+                        ))}
+                      </div>
+                      <Textarea
+                        value={editSettings.default_message}
+                        onChange={(e) => setEditSettings({ ...editSettings, default_message: e.target.value })}
+                        rows={2}
+                        className="resize-none"
+                      />
+                    </div>
+
+                    <Button onClick={handleSaveSettings} disabled={saving} className="w-full">
+                      {saving && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+                      حفظ الرسائل
+                    </Button>
                   </TabsContent>
 
-                  <TabsContent value="iframe" className="space-y-4">
+                  {/* Colors Tab */}
+                  <TabsContent value="colors" className="space-y-6">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <Label>اللون الأساسي</Label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={editSettings.primary_color}
+                            onChange={(e) => setEditSettings({ ...editSettings, primary_color: e.target.value })}
+                            className="h-12 w-16 rounded border cursor-pointer"
+                          />
+                          <Input
+                            value={editSettings.primary_color}
+                            onChange={(e) => setEditSettings({ ...editSettings, primary_color: e.target.value })}
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        <Label>اللون الثانوي</Label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={editSettings.secondary_color}
+                            onChange={(e) => setEditSettings({ ...editSettings, secondary_color: e.target.value })}
+                            className="h-12 w-16 rounded border cursor-pointer"
+                          />
+                          <Input
+                            value={editSettings.secondary_color}
+                            onChange={(e) => setEditSettings({ ...editSettings, secondary_color: e.target.value })}
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Color Preview */}
+                    <div 
+                      className="p-6 rounded-xl text-white"
+                      style={{ background: `linear-gradient(135deg, ${editSettings.primary_color} 0%, ${editSettings.secondary_color} 100%)` }}
+                    >
+                      <p className="font-bold text-lg mb-1">معاينة الألوان</p>
+                      <p className="text-sm opacity-90">هكذا ستظهر ألوان نافذة الدردشة</p>
+                    </div>
+
+                    <Button onClick={handleSaveSettings} disabled={saving} className="w-full">
+                      {saving && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+                      حفظ الألوان
+                    </Button>
+                  </TabsContent>
+
+                  {/* Preview Tab */}
+                  <TabsContent value="preview" className="space-y-4">
                     <Alert>
-                      <FileCode className="h-4 w-4" />
+                      <Eye className="h-4 w-4" />
                       <AlertDescription>
-                        كود iframe بسيط للتضمين السريع
+                        معاينة مباشرة لنافذة الدردشة كما ستظهر للعملاء
                       </AlertDescription>
                     </Alert>
-                    <div className="relative">
-                      <pre className="bg-muted p-4 rounded-lg text-xs overflow-auto max-h-40 text-left" dir="ltr">
-                        {getIframeCode(selectedToken.token)}
-                      </pre>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="absolute top-2 left-2"
-                        onClick={() => copyToClipboard(getIframeCode(selectedToken.token), 'iframe')}
-                      >
-                        {copiedField === 'iframe' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      </Button>
+                    <div className="border rounded-xl overflow-hidden h-[500px]">
+                      <iframe
+                        src={getChatEmbedUrl(selectedToken.token)}
+                        className="w-full h-full"
+                        title="Chat Preview"
+                      />
                     </div>
                   </TabsContent>
                 </Tabs>
-
-                <Separator className="my-4" />
-
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">رابط التضمين المباشر:</span>
-                  <div className="flex items-center gap-2">
-                    <code className="bg-muted px-2 py-1 rounded text-xs">
-                      {getChatEmbedUrl(selectedToken.token)}
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => copyToClipboard(getChatEmbedUrl(selectedToken.token), 'url')}
-                    >
-                      {copiedField === 'url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => window.open(getChatEmbedUrl(selectedToken.token), '_blank')}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           ) : (
-            <Card className="h-full flex items-center justify-center">
+            <Card className="h-full flex items-center justify-center min-h-[400px]">
               <div className="text-center p-6">
                 <MessageCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-30" />
-                <p className="text-muted-foreground">اختر رمزاً من القائمة لعرض أكواد التضمين</p>
+                <p className="text-muted-foreground">اختر رمزاً من القائمة لعرض الإعدادات والأكواد</p>
               </div>
             </Card>
           )}

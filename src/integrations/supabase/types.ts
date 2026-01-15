@@ -816,43 +816,55 @@ export type Database = {
           allowed_domains: string[] | null
           created_at: string
           created_by: string | null
+          default_message: string | null
           expires_at: string | null
           id: string
           is_active: boolean | null
           last_used_at: string | null
           name: string
           organization_id: string
+          primary_color: string | null
+          secondary_color: string | null
           token: string
           updated_at: string
           usage_count: number | null
+          welcome_message: string | null
         }
         Insert: {
           allowed_domains?: string[] | null
           created_at?: string
           created_by?: string | null
+          default_message?: string | null
           expires_at?: string | null
           id?: string
           is_active?: boolean | null
           last_used_at?: string | null
           name: string
           organization_id: string
+          primary_color?: string | null
+          secondary_color?: string | null
           token: string
           updated_at?: string
           usage_count?: number | null
+          welcome_message?: string | null
         }
         Update: {
           allowed_domains?: string[] | null
           created_at?: string
           created_by?: string | null
+          default_message?: string | null
           expires_at?: string | null
           id?: string
           is_active?: boolean | null
           last_used_at?: string | null
           name?: string
           organization_id?: string
+          primary_color?: string | null
+          secondary_color?: string | null
           token?: string
           updated_at?: string
           usage_count?: number | null
+          welcome_message?: string | null
         }
         Relationships: [
           {
