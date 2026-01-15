@@ -164,6 +164,7 @@ export default function EmbedChatWidget({
     startConversation,
     sendMessage,
     fetchMessages,
+    fetchConversation,
     setCurrentConversation
   } = useChat({ embedToken, autoFetch: false });
 
@@ -171,27 +172,26 @@ export default function EmbedChatWidget({
   useEffect(() => {
     const storedConversationId = getStoredConversationId();
     if (storedConversationId && !currentConversation) {
-      // Fetch the stored conversation
+      // Fetch the stored conversation with full data
       const restoreConversation = async () => {
         try {
-          await fetchMessages(storedConversationId);
-          // Create a minimal conversation object to restore state
-          setCurrentConversation({
-            id: storedConversationId,
-            status: 'assigned',
-            subject: 'محادثة مستعادة',
-            organization_id: null,
-            client_account_id: null,
-            assigned_agent_id: null,
-            source: 'embed',
-            source_domain: window.location.hostname,
-            metadata: {},
-            unread_count: 0,
-            last_message_at: null,
-            last_message_preview: null,
-            created_at: new Date().toISOString(),
-            closed_at: null
-          });
+          const conv = await fetchConversation(storedConversationId);
+          
+          if (conv) {
+            // Check if conversation is still open
+            if (conv.status === 'closed') {
+              // Conversation was closed, clear storage and show new chat form
+              clearStoredConversation();
+              return;
+            }
+            
+            // Restore the conversation
+            setCurrentConversation(conv);
+            await fetchMessages(storedConversationId);
+          } else {
+            // Conversation not found, clear storage
+            clearStoredConversation();
+          }
         } catch (error) {
           console.error('Error restoring conversation:', error);
           // Clear invalid stored conversation

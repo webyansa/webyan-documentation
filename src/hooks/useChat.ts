@@ -112,10 +112,24 @@ export function useChat(options: UseChatOptions = {}) {
       
       // Mark as read
       await callChatAPI('mark_read', { conversationId });
+      
+      return data.messages || [];
     } catch (error) {
       console.error('Error fetching messages:', error);
+      throw error;
     } finally {
       setLoading(false);
+    }
+  }, [callChatAPI]);
+
+  // Fetch a single conversation by ID
+  const fetchConversation = useCallback(async (conversationId: string) => {
+    try {
+      const data = await callChatAPI('get_conversation', { conversationId });
+      return data.conversation;
+    } catch (error) {
+      console.error('Error fetching conversation:', error);
+      return null;
     }
   }, [callChatAPI]);
 
@@ -336,6 +350,7 @@ export function useChat(options: UseChatOptions = {}) {
     sending,
     fetchConversations,
     fetchMessages,
+    fetchConversation,
     startConversation,
     sendMessage,
     assignConversation,

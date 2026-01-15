@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface ChatRequest {
-  action: 'start_conversation' | 'send_message' | 'get_messages' | 'get_conversations' | 'mark_read' | 'assign' | 'close' | 'reopen' | 'convert_to_ticket';
+  action: 'start_conversation' | 'send_message' | 'get_messages' | 'get_conversations' | 'get_conversation' | 'mark_read' | 'assign' | 'close' | 'reopen' | 'convert_to_ticket';
   conversationId?: string;
   message?: string;
   attachments?: string[];
@@ -156,6 +156,64 @@ serve(async (req) => {
           );
         }
 
+        // Check for existing active conversation for this client/embed token
+        let existingConversation = null;
+        
+        if (embedTokenId && organizationId) {
+          // For embed widget: find existing open conversation with same embed_token_id and organization
+          const { data: existing } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('embed_token_id', embedTokenId)
+            .eq('organization_id', organizationId)
+            .in('status', ['unassigned', 'assigned'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (existing) {
+            existingConversation = existing;
+          }
+        } else if (clientAccountId) {
+          // For portal: find existing open conversation for this client account
+          const { data: existing } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('client_account_id', clientAccountId)
+            .in('status', ['unassigned', 'assigned'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (existing) {
+            existingConversation = existing;
+          }
+        }
+
+        // If existing conversation found, send message to it instead of creating new one
+        if (existingConversation) {
+          // Send the message to existing conversation
+          if (body.message) {
+            await supabase.from('conversation_messages').insert({
+              conversation_id: existingConversation.id,
+              sender_type: 'client',
+              sender_name: body.senderName || 'العميل',
+              body: body.message,
+              attachments: body.attachments || []
+            });
+          }
+
+          return new Response(
+            JSON.stringify({ 
+              conversation: existingConversation, 
+              resumed: true,
+              message: 'تم استئناف المحادثة السابقة' 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // No existing conversation - create new one
         // Get chat settings for auto-assign
         const { data: settings } = await supabase
           .from('chat_settings')
@@ -434,6 +492,45 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ conversations: conversations || [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'get_conversation': {
+        if (!body.conversationId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const { data: conv, error } = await supabase
+          .from('conversations')
+          .select(`
+            *,
+            organization:client_organizations(id, name, contact_email, logo_url),
+            assigned_agent:staff_members(id, full_name, agent_status)
+          `)
+          .eq('id', body.conversationId)
+          .single();
+
+        if (error || !conv) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Verify access
+        if (!canManageAllConversations && !canAgentAct && conv.organization_id !== organizationId) {
+          return new Response(
+            JSON.stringify({ error: 'Access denied' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ conversation: conv }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
