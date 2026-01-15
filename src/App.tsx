@@ -47,6 +47,7 @@ import StaffPerformancePage from "./pages/admin/StaffPerformancePage";
 import EscalationSettingsPage from "./pages/admin/EscalationSettingsPage";
 import EmbedSettingsPage from "./pages/admin/EmbedSettingsPage";
 import ChatSettingsPage from "./pages/admin/ChatSettingsPage";
+import AdminChatPage from "./pages/admin/AdminChatPage";
 
 // Client Portal pages
 import PortalLayout from "./pages/portal/PortalLayout";
@@ -147,6 +148,7 @@ const App = () => (
                 <Route path="escalation-settings" element={<EscalationSettingsPage />} />
                 <Route path="embed-settings" element={<EmbedSettingsPage />} />
                 <Route path="chat-settings" element={<ChatSettingsPage />} />
+                <Route path="chat" element={<AdminChatPage />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />
