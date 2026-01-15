@@ -5,7 +5,7 @@ import { ChatPopupWindow } from './ChatPopupWindow';
 import { ChatBranding, defaultBranding } from './types';
 
 interface MessengerWidgetProps {
-  embedToken: string;
+  embedToken?: string;
   branding?: Partial<ChatBranding>;
   contactEmail?: string;
 }
@@ -32,23 +32,24 @@ export function MessengerWidget({
   const {
     conversations,
     messages,
+    loading,
     sending,
     startConversation,
     sendMessage,
     fetchMessages,
+    fetchConversations,
     setCurrentConversation
   } = useChat({ embedToken, autoFetch: false });
 
   // Fetch conversations when launcher opens
   useEffect(() => {
     if (isLauncherOpen) {
-      // Conversations will be fetched via the hook
+      fetchConversations();
     }
-  }, [isLauncherOpen]);
+  }, [isLauncherOpen, fetchConversations]);
 
   // Calculate total unread
-  const unreadTotal = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0) +
-    openWindows.reduce((sum, w) => w.isMinimized ? (w.conversation.unread_count || 0) : 0, 0);
+  const unreadTotal = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
 
   const handleSelectConversation = useCallback(async (conv: Conversation) => {
     // Check if already open
@@ -66,19 +67,19 @@ export function MessengerWidget({
 
     // Open new window
     setCurrentConversation(conv);
-    const msgs = await fetchMessages(conv.id);
+    await fetchMessages(conv.id);
     
     setOpenWindows(prev => {
       const newWindows = [
         ...prev.slice(-(MAX_OPEN_WINDOWS - 1)),
-        { conversation: conv, messages: messages, isMinimized: false }
+        { conversation: conv, messages: [], isMinimized: false }
       ];
       return newWindows;
     });
     
     setActiveWindowId(conv.id);
     setIsLauncherOpen(false);
-  }, [openWindows, fetchMessages, setCurrentConversation, messages]);
+  }, [openWindows, fetchMessages, setCurrentConversation]);
 
   const handleStartNewChat = useCallback(async (name: string, email: string, message: string) => {
     const newConv = await startConversation('محادثة جديدة', message, name, email || contactEmail);
@@ -94,13 +95,7 @@ export function MessengerWidget({
 
   const handleSendMessage = useCallback(async (conversationId: string, message: string) => {
     await sendMessage(conversationId, message);
-    // Update window messages
-    setOpenWindows(prev => prev.map(w => 
-      w.conversation.id === conversationId 
-        ? { ...w, messages: [...w.messages, ...messages.slice(-1)] }
-        : w
-    ));
-  }, [sendMessage, messages]);
+  }, [sendMessage]);
 
   const handleCloseWindow = useCallback((conversationId: string) => {
     setOpenWindows(prev => prev.filter(w => w.conversation.id !== conversationId));
@@ -140,6 +135,7 @@ export function MessengerWidget({
         onStartNewChat={handleStartNewChat}
         branding={branding}
         starting={sending}
+        loading={loading}
       />
 
       {/* Open Chat Windows */}
