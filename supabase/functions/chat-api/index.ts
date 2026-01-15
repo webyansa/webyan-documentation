@@ -377,6 +377,14 @@ serve(async (req) => {
       }
 
       case 'get_conversations': {
+        // If not staff and no organization, return empty array
+        if (!isStaff && !organizationId) {
+          return new Response(
+            JSON.stringify({ conversations: [] }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         let query = supabase
           .from('conversations')
           .select(`
@@ -386,7 +394,7 @@ serve(async (req) => {
           `)
           .order('last_message_at', { ascending: false, nullsFirst: false });
 
-        if (!isStaff) {
+        if (!isStaff && organizationId) {
           query = query.eq('organization_id', organizationId);
         }
 
@@ -401,7 +409,7 @@ serve(async (req) => {
         }
 
         return new Response(
-          JSON.stringify({ conversations }),
+          JSON.stringify({ conversations: conversations || [] }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
