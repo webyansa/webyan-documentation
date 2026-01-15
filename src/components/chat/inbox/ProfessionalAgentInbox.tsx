@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useChat, Conversation, Message } from '@/hooks/useChat';
 import { useAgentStatus } from '@/hooks/useAgentStatus';
+import { useTypingIndicator } from '@/hooks/useTypingIndicator';
+import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -85,6 +87,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
   } = useChat({ autoFetch: true });
 
   const { currentStatus, staffId, updateStatus, availableAgents } = useAgentStatus();
+  const { playNotificationSound } = useNotificationSound();
   
   const [messageText, setMessageText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,12 +109,34 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [lastMessageCount, setLastMessageCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Typing indicator hook
+  const { typingUsers, handleTyping, stopTyping } = useTypingIndicator({
+    conversationId: currentConversation?.id || null,
+    userId: staffId || 'agent',
+    userName: staffName || 'الموظف',
+    userType: 'agent'
+  });
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, typingUsers]);
+
+  // Play notification sound for new client messages
+  useEffect(() => {
+    if (messages.length > lastMessageCount && lastMessageCount > 0) {
+      const newMessages = messages.slice(lastMessageCount);
+      const hasNewClientMessage = newMessages.some(msg => msg.sender_type !== 'agent' && msg.sender_type !== 'system');
+      
+      if (hasNewClientMessage && soundEnabled) {
+        playNotificationSound();
+      }
+    }
+    setLastMessageCount(messages.length);
+  }, [messages.length, soundEnabled, playNotificationSound, lastMessageCount]);
 
   useEffect(() => {
     fetchStaffMembers();
@@ -193,6 +218,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
     if (!messageText.trim() || !currentConversation) return;
     const text = messageText;
     setMessageText('');
+    stopTyping();
     await sendMessage(currentConversation.id, text, undefined, staffName);
   };
 

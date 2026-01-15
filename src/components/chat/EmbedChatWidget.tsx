@@ -1,16 +1,19 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useChat } from '@/hooks/useChat';
+import { useTypingIndicator } from '@/hooks/useTypingIndicator';
+import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MessageCircle, Send, X, Loader2, CheckCheck, Headphones, Sparkles, User, Mail, Edit3, Image, Reply, CornerDownLeft } from 'lucide-react';
+import { MessageCircle, Send, X, Loader2, CheckCheck, Headphones, Sparkles, User, Mail, Edit3, Image, Reply, CornerDownLeft, Volume2, VolumeX } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import EmojiPicker from './EmojiPicker';
 import ImagePreviewModal from './ImagePreviewModal';
 import ReplyPreview from './ReplyPreview';
+import { TypingIndicator } from './messenger/TypingIndicator';
 
 interface Message {
   id: string;
@@ -81,11 +84,19 @@ export default function EmbedChatWidget({
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [lastMessageCount, setLastMessageCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Generate a unique session ID for this embed user
+  const sessionId = useRef(`embed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+
+  // Notification sound hook
+  const { playNotificationSound } = useNotificationSound();
 
   // Update fields when props change
   useEffect(() => {
@@ -109,13 +120,34 @@ export default function EmbedChatWidget({
     fetchMessages
   } = useChat({ embedToken, autoFetch: false });
 
+  // Typing indicator hook
+  const { typingUsers, handleTyping, stopTyping } = useTypingIndicator({
+    conversationId: currentConversation?.id || null,
+    userId: sessionId.current,
+    userName: name || 'زائر',
+    userType: 'embed'
+  });
+
   // Check if client data is prefilled
   const hasPrefilledData = !!(prefillName || prefillEmail);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, typingUsers]);
+
+  // Play notification sound for new agent messages
+  useEffect(() => {
+    if (messages.length > lastMessageCount && lastMessageCount > 0) {
+      const newMessages = messages.slice(lastMessageCount);
+      const hasNewAgentMessage = newMessages.some(msg => msg.sender_type === 'agent');
+      
+      if (hasNewAgentMessage && soundEnabled && isOpen) {
+        playNotificationSound();
+      }
+    }
+    setLastMessageCount(messages.length);
+  }, [messages.length, soundEnabled, isOpen, playNotificationSound, lastMessageCount]);
 
   // Notify parent of widget state
   useEffect(() => {
@@ -176,6 +208,7 @@ export default function EmbedChatWidget({
     
     setMessageText('');
     setReplyTo(null);
+    stopTyping(); // Stop typing when message is sent
     
     // Include reply info in the message body for display
     let fullMessage = msg;
@@ -185,6 +218,12 @@ export default function EmbedChatWidget({
     
     await sendMessage(currentConversation.id, fullMessage, undefined, name);
     setTimeout(pollMessages, 500);
+  };
+
+  // Handle typing in the message input
+  const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMessageText(e.target.value);
+    handleTyping();
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -341,14 +380,30 @@ export default function EmbedChatWidget({
                 )}
               </div>
             </div>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-10 w-10 rounded-xl text-white hover:bg-white/20 transition-colors" 
-              onClick={() => setIsOpen(false)}
-            >
-              <X className="h-5 w-5" />
-            </Button>
+            <div className="flex items-center gap-1">
+              {/* Sound toggle button */}
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-9 w-9 rounded-xl text-white/70 hover:text-white hover:bg-white/20 transition-colors" 
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                title={soundEnabled ? 'كتم الصوت' : 'تفعيل الصوت'}
+              >
+                {soundEnabled ? (
+                  <Volume2 className="h-4 w-4" />
+                ) : (
+                  <VolumeX className="h-4 w-4" />
+                )}
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-10 w-10 rounded-xl text-white hover:bg-white/20 transition-colors" 
+                onClick={() => setIsOpen(false)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -594,6 +649,18 @@ export default function EmbedChatWidget({
                     </div>
                   );
                 })}
+
+                {/* Typing Indicator */}
+                {typingUsers.filter(u => u.user_type === 'agent').length > 0 && (
+                  <div className="flex justify-end">
+                    <TypingIndicator 
+                      name={typingUsers.find(u => u.user_type === 'agent')?.user_name || 'فريق الدعم'}
+                      isDark={isDark}
+                      primaryColor={webyanSecondary}
+                    />
+                  </div>
+                )}
+
                 <div ref={messagesEndRef} />
               </div>
             </ScrollArea>
@@ -644,8 +711,9 @@ export default function EmbedChatWidget({
                       ref={inputRef}
                       placeholder={replyTo ? 'اكتب ردك...' : 'اكتب رسالتك...'}
                       value={messageText}
-                      onChange={(e) => setMessageText(e.target.value)}
+                      onChange={handleMessageChange}
                       onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                      onBlur={stopTyping}
                       disabled={sending}
                       className={`h-11 rounded-xl text-sm px-4 ${
                         isDark 
