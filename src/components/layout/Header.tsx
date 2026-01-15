@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Search, Menu, X, LogOut, Settings, User, LayoutDashboard, Building2 } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Search, Menu, X, LogOut, Settings, User, Building2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,8 +15,11 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
+  const location = useLocation();
+  const isDashboardOnly = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff') || location.pathname.startsWith('/portal');
+
   const [searchQuery, setSearchQuery] = useState("");
-  const { user, role, signOut, isAdmin, isAdminOrEditor } = useAuth();
+  const { user, role, signOut, isAdminOrEditor } = useAuth();
   const [isClient, setIsClient] = useState(false);
   const [clientOrganizationId, setClientOrganizationId] = useState<string | null>(null);
   const [isStaff, setIsStaff] = useState(false);
@@ -111,32 +114,36 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
           
           {user ? (
             <>
-              <NotificationDropdown />
-              
-              {/* Chat Notifications for Admin */}
-              {isAdminOrEditor && (
-                <ChatNotificationDropdown 
-                  userType="admin" 
-                  linkTo="/admin/chat"
-                />
-              )}
-              
-              {/* Chat Notifications for Staff */}
-              {isStaff && !isAdminOrEditor && staffId && (
-                <ChatNotificationDropdown 
-                  userType="staff" 
-                  staffId={staffId}
-                  linkTo="/staff/chat"
-                />
-              )}
-              
-              {/* Chat Notifications for Clients */}
-              {isClient && clientOrganizationId && (
-                <ChatNotificationDropdown 
-                  userType="client" 
-                  organizationId={clientOrganizationId}
-                  linkTo="/portal/chat"
-                />
+              {isDashboardOnly && (
+                <>
+                  <NotificationDropdown />
+
+                  {/* Chat Notifications for Admin */}
+                  {isAdminOrEditor && (
+                    <ChatNotificationDropdown 
+                      userType="admin" 
+                      linkTo="/admin/chat"
+                    />
+                  )}
+
+                  {/* Chat Notifications for Staff */}
+                  {isStaff && !isAdminOrEditor && staffId && (
+                    <ChatNotificationDropdown 
+                      userType="staff" 
+                      staffId={staffId}
+                      linkTo="/staff/chat"
+                    />
+                  )}
+
+                  {/* Chat Notifications for Clients */}
+                  {isClient && clientOrganizationId && (
+                    <ChatNotificationDropdown 
+                      userType="client" 
+                      organizationId={clientOrganizationId}
+                      linkTo="/portal/chat"
+                    />
+                  )}
+                </>
               )}
               
               {/* Client Portal Link */}

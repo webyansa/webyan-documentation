@@ -15,6 +15,7 @@ import {
   UserCog,
   MessageCircle
 } from 'lucide-react';
+import { ChatNotificationDropdown } from '@/components/layout/ChatNotificationDropdown';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -122,6 +123,11 @@ export default function StaffLayout() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Chat notifications (داخل لوحة الموظف) */}
+            {permissions.staffId && (
+              <ChatNotificationDropdown userType="staff" staffId={permissions.staffId} linkTo="/staff/chat" />
+            )}
+
             <Link to="/">
               <Button variant="outline" size="sm" className="gap-2">
                 <Home className="h-4 w-4" />

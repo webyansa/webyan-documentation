@@ -43,6 +43,7 @@ serve(async (req) => {
     let staffId: string | null = null;
     let userId: string | null = null;
     let organizationName: string | null = null;
+    let isPrivileged = false; // admin/editor
 
     // Verify embed token or auth header
     if (embedToken) {
@@ -68,7 +69,7 @@ serve(async (req) => {
       // Check allowed domains
       if (tokenData.allowed_domains && tokenData.allowed_domains.length > 0) {
         const requestDomain = origin.replace(/^https?:\/\//, '').split('/')[0];
-        const isAllowed = tokenData.allowed_domains.some((domain: string) => 
+        const isAllowed = tokenData.allowed_domains.some((domain: string) =>
           requestDomain === domain || requestDomain.endsWith('.' + domain)
         );
         if (!isAllowed) {
@@ -102,15 +103,20 @@ serve(async (req) => {
 
       userId = user.id;
 
+      // Check privileges (admin/editor)
+      const { data: isAdminOrEditor } = await supabase
+        .rpc('is_admin_or_editor', { _user_id: user.id });
+      isPrivileged = !!isAdminOrEditor;
+
       // Check if staff
       const { data: staffData } = await supabase
         .from('staff_members')
         .select('id')
         .eq('user_id', user.id)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
-      if (staffData) {
+      if (staffData?.id) {
         isStaff = true;
         staffId = staffData.id;
       } else {
@@ -119,7 +125,7 @@ serve(async (req) => {
           .from('client_accounts')
           .select('id, organization_id')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (clientData) {
           clientAccountId = clientData.id;
@@ -133,10 +139,13 @@ serve(async (req) => {
       );
     }
 
+    const canAgentAct = isStaff || isPrivileged;
+    const canManageAllConversations = isPrivileged;
+
     const body: ChatRequest = await req.json();
     const { action } = body;
 
-    console.log(`Chat API action: ${action}, isStaff: ${isStaff}, orgId: ${organizationId}`);
+    console.log(`Chat API action: ${action}, isStaff: ${isStaff}, isPrivileged: ${isPrivileged}, orgId: ${organizationId}`);
 
     switch (action) {
       case 'start_conversation': {
@@ -277,7 +286,7 @@ serve(async (req) => {
           );
         }
 
-        if (!isStaff && conv.organization_id !== organizationId) {
+        if (!canManageAllConversations && !canAgentAct && conv.organization_id !== organizationId) {
           return new Response(
             JSON.stringify({ error: 'Access denied' }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -289,15 +298,21 @@ serve(async (req) => {
         let senderType = 'client';
         let senderId: string | null = clientAccountId;
 
-        if (isStaff) {
-          const { data: staff } = await supabase
-            .from('staff_members')
-            .select('full_name')
-            .eq('id', staffId)
-            .single();
-          senderName = staff?.full_name || 'الدعم';
+        if (canAgentAct) {
+          // If staff member exists, use their name, otherwise fall back to provided name.
+          if (staffId) {
+            const { data: staff } = await supabase
+              .from('staff_members')
+              .select('full_name')
+              .eq('id', staffId)
+              .single();
+            senderName = staff?.full_name || body.senderName || 'الدعم';
+            senderId = staffId;
+          } else {
+            senderName = body.senderName || 'الإدارة';
+            senderId = null;
+          }
           senderType = 'agent';
-          senderId = staffId;
         }
 
         const { data: message, error: msgError } = await supabase
@@ -322,7 +337,7 @@ serve(async (req) => {
         }
 
         // Update staff last activity
-        if (isStaff && staffId) {
+        if (canAgentAct && staffId) {
           await supabase
             .from('staff_members')
             .update({ last_activity_at: new Date().toISOString() })
@@ -350,7 +365,7 @@ serve(async (req) => {
           .eq('id', body.conversationId)
           .single();
 
-        if (!isStaff && conv?.organization_id !== organizationId) {
+        if (!canManageAllConversations && !canAgentAct && conv?.organization_id !== organizationId) {
           return new Response(
             JSON.stringify({ error: 'Access denied' }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -377,8 +392,8 @@ serve(async (req) => {
       }
 
       case 'get_conversations': {
-        // If not staff and no organization, return empty array
-        if (!isStaff && !organizationId) {
+        // If not privileged/staff and no organization, return empty array
+        if (!canManageAllConversations && !canAgentAct && !organizationId) {
           return new Response(
             JSON.stringify({ conversations: [] }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -394,7 +409,8 @@ serve(async (req) => {
           `)
           .order('last_message_at', { ascending: false, nullsFirst: false });
 
-        if (!isStaff && organizationId) {
+        // Clients: only their organization
+        if (!canManageAllConversations && !canAgentAct && organizationId) {
           query = query.eq('organization_id', organizationId);
         }
 
@@ -442,7 +458,7 @@ serve(async (req) => {
       }
 
       case 'assign': {
-        if (!isStaff) {
+        if (!canAgentAct) {
           return new Response(
             JSON.stringify({ error: 'Staff access required' }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -456,7 +472,7 @@ serve(async (req) => {
           );
         }
 
-        const targetAgentId = body.agentId || staffId;
+        const targetAgentId = body.agentId || staffId || undefined;
 
         // Get current assignment
         const { data: conv } = await supabase
@@ -518,7 +534,7 @@ serve(async (req) => {
       }
 
       case 'close': {
-        if (!isStaff) {
+        if (!canAgentAct) {
           return new Response(
             JSON.stringify({ error: 'Staff access required' }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -577,7 +593,7 @@ serve(async (req) => {
       }
 
       case 'reopen': {
-        if (!isStaff) {
+        if (!canAgentAct) {
           return new Response(
             JSON.stringify({ error: 'Staff access required' }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -613,7 +629,7 @@ serve(async (req) => {
       }
 
       case 'convert_to_ticket': {
-        if (!isStaff) {
+        if (!canAgentAct) {
           return new Response(
             JSON.stringify({ error: 'Staff access required' }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

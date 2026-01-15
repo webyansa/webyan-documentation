@@ -15,6 +15,7 @@ import {
   Building2,
   Bell
 } from 'lucide-react';
+import { ChatNotificationDropdown } from '@/components/layout/ChatNotificationDropdown';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +26,7 @@ interface ClientInfo {
   full_name: string;
   email: string;
   job_title: string | null;
+  organization_id: string;
   organization: {
     name: string;
     logo_url: string | null;
@@ -73,6 +75,7 @@ const PortalLayout = () => {
           full_name,
           email,
           job_title,
+          organization_id,
           organization:client_organizations (
             name,
             logo_url,
@@ -93,6 +96,7 @@ const PortalLayout = () => {
           full_name: data.full_name,
           email: data.email,
           job_title: data.job_title,
+          organization_id: data.organization_id,
           organization: org
         });
       } else {
@@ -220,15 +224,25 @@ const PortalLayout = () => {
         </Sheet>
         
         <h1 className="font-bold text-lg">بوابة عملاء ويبيان</h1>
-        
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="w-5 h-5" />
-          {unreadNotifications > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">
-              {unreadNotifications}
-            </span>
+
+        <div className="flex items-center gap-2">
+          {clientInfo?.organization_id && (
+            <ChatNotificationDropdown
+              userType="client"
+              organizationId={clientInfo.organization_id}
+              linkTo="/portal/chat"
+            />
           )}
-        </Button>
+
+          <Button variant="ghost" size="icon" className="relative">
+            <Bell className="w-5 h-5" />
+            {unreadNotifications > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">
+                {unreadNotifications}
+              </span>
+            )}
+          </Button>
+        </div>
       </header>
 
       {/* Desktop Sidebar */}

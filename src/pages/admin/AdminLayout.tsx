@@ -31,6 +31,7 @@ import {
   Home,
   Loader2
 } from 'lucide-react';
+import { ChatNotificationDropdown } from '@/components/layout/ChatNotificationDropdown';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -194,6 +195,9 @@ export default function AdminLayout() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Chat notifications (داخل لوحة التحكم فقط) */}
+            <ChatNotificationDropdown userType="admin" linkTo="/admin/chat" />
+
             <Link to="/">
               <Button variant="outline" size="sm" className="gap-2">
                 <BookOpen className="h-4 w-4" />
