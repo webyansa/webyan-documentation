@@ -6,6 +6,7 @@ export interface Conversation {
   id: string;
   organization_id: string | null;
   client_account_id: string | null;
+  embed_token_id: string | null;
   subject: string | null;
   status: 'unassigned' | 'assigned' | 'closed';
   assigned_agent_id: string | null;
