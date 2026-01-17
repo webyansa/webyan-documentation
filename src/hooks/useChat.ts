@@ -220,6 +220,60 @@ export function useChat(options: UseChatOptions = {}) {
     }
   }, [callChatAPI, fetchConversations, toast]);
 
+  const archiveConversation = useCallback(async (conversationId: string) => {
+    try {
+      await callChatAPI('archive', { conversationId });
+      toast({
+        title: 'تم',
+        description: 'تم نقل المحادثة إلى المهملات'
+      });
+      await fetchConversations();
+    } catch (error) {
+      console.error('Error archiving conversation:', error);
+      toast({
+        title: 'خطأ',
+        description: 'فشل في أرشفة المحادثة',
+        variant: 'destructive'
+      });
+    }
+  }, [callChatAPI, fetchConversations, toast]);
+
+  const restoreConversation = useCallback(async (conversationId: string) => {
+    try {
+      await callChatAPI('restore', { conversationId });
+      toast({
+        title: 'تم',
+        description: 'تم استعادة المحادثة'
+      });
+      await fetchConversations();
+    } catch (error) {
+      console.error('Error restoring conversation:', error);
+      toast({
+        title: 'خطأ',
+        description: 'فشل في استعادة المحادثة',
+        variant: 'destructive'
+      });
+    }
+  }, [callChatAPI, fetchConversations, toast]);
+
+  const deleteConversation = useCallback(async (conversationId: string) => {
+    try {
+      await callChatAPI('delete_permanently', { conversationId });
+      toast({
+        title: 'تم',
+        description: 'تم حذف المحادثة نهائياً'
+      });
+      await fetchConversations();
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      toast({
+        title: 'خطأ',
+        description: 'فشل في حذف المحادثة',
+        variant: 'destructive'
+      });
+    }
+  }, [callChatAPI, fetchConversations, toast]);
+
   const closeConversation = useCallback(async (conversationId: string) => {
     try {
       await callChatAPI('close', { conversationId });
@@ -359,6 +413,9 @@ export function useChat(options: UseChatOptions = {}) {
     reopenConversation,
     convertToTicket,
     selectConversation,
-    setCurrentConversation
+    setCurrentConversation,
+    archiveConversation,
+    restoreConversation,
+    deleteConversation
   };
 }

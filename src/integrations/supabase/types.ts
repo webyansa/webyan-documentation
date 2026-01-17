@@ -259,6 +259,7 @@ export type Database = {
       }
       conversations: {
         Row: {
+          archived_at: string | null
           assigned_agent_id: string | null
           client_account_id: string | null
           closed_at: string | null
@@ -277,6 +278,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
           assigned_agent_id?: string | null
           client_account_id?: string | null
           closed_at?: string | null
@@ -295,6 +297,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
           assigned_agent_id?: string | null
           client_account_id?: string | null
           closed_at?: string | null

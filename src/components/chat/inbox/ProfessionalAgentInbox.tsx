@@ -21,13 +21,14 @@ import {
   UserPlus, X, RotateCcw, Ticket, Circle, Search, Users, Inbox,
   Phone, Mail, ExternalLink, Loader2, Plus, ChevronLeft, Tag,
   MoreHorizontal, ArrowUpRight, StickyNote, AlertTriangle, Clock,
-  Paperclip, Smile, Volume2, VolumeX, Image as ImageIcon
+  Paperclip, Smile, Volume2, VolumeX, Image as ImageIcon, Trash2, Archive, RefreshCw, Info
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { TypingIndicator } from '../messenger/TypingIndicator';
 import ImagePreviewModal from '../ImagePreviewModal';
+import ClientDetailPanel from './ClientDetailPanel';
 
 // Helper function to extract image URL from message body
 const extractImageUrl = (body: string): string | null => {
@@ -53,7 +54,7 @@ const conversationStatusConfig = {
   closed: { label: 'مغلقة', color: 'bg-gray-400', textColor: 'text-gray-500', bgLight: 'bg-gray-50' }
 };
 
-type ConversationTab = 'customers' | 'internal';
+type ConversationTab = 'customers' | 'internal' | 'archived';
 type ConversationFilter = 'all' | 'unassigned' | 'assigned' | 'mine' | 'closed';
 type ViewMode = 'grouped' | 'list'; // New: grouped by client or flat list
 
@@ -105,7 +106,10 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
     reopenConversation,
     convertToTicket,
     selectConversation,
-    setCurrentConversation
+    setCurrentConversation,
+    archiveConversation,
+    restoreConversation,
+    deleteConversation
   } = useChat({ autoFetch: true });
 
   const { currentStatus, staffId, updateStatus, availableAgents } = useAgentStatus();
@@ -119,11 +123,14 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
   const [showNewInternalChat, setShowNewInternalChat] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showNoteDialog, setShowNoteDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [ticketSubject, setTicketSubject] = useState('');
   const [ticketCategory, setTicketCategory] = useState('technical');
   const [ticketPriority, setTicketPriority] = useState('medium');
   const [internalNote, setInternalNote] = useState('');
   const [showCustomerPanel, setShowCustomerPanel] = useState(true);
+  const [showClientDetailPanel, setShowClientDetailPanel] = useState(false);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [selectedStaff, setSelectedStaff] = useState<string>('');
   const [internalMessage, setInternalMessage] = useState('');
@@ -135,6 +142,8 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grouped');
   const [selectedClient, setSelectedClient] = useState<GroupedClient | null>(null);
+  const [archivedConversations, setArchivedConversations] = useState<Conversation[]>([]);
+  const [loadingArchived, setLoadingArchived] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -168,6 +177,34 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
     fetchStaffName();
     fetchQuickReplies();
   }, []);
+
+  // Fetch archived conversations when tab changes
+  useEffect(() => {
+    if (activeTab === 'archived') {
+      fetchArchivedConversations();
+    }
+  }, [activeTab]);
+
+  const fetchArchivedConversations = async () => {
+    setLoadingArchived(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const response = await supabase.functions.invoke('chat-api', {
+        body: { action: 'get_archived' },
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+
+      if (response.data?.conversations) {
+        setArchivedConversations(response.data.conversations);
+      }
+    } catch (error) {
+      console.error('Error fetching archived:', error);
+    } finally {
+      setLoadingArchived(false);
+    }
+  };
 
   const fetchStaffMembers = async () => {
     const { data } = await supabase
@@ -493,7 +530,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ConversationTab)}>
-            <TabsList className="w-full grid grid-cols-2 h-9">
+            <TabsList className="w-full grid grid-cols-3 h-9">
               <TabsTrigger value="customers" className="text-xs gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                 <Users className="h-3.5 w-3.5" />
                 العملاء
@@ -511,6 +548,10 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                     {internalUnread}
                   </Badge>
                 )}
+              </TabsTrigger>
+              <TabsTrigger value="archived" className="text-xs gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <Trash2 className="h-3.5 w-3.5" />
+                المهملات
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -600,6 +641,64 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
+          ) : activeTab === 'archived' ? (
+            /* Archived Conversations */
+            loadingArchived ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : archivedConversations.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <Trash2 className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                <p className="text-sm">سلة المهملات فارغة</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {archivedConversations.map((conv) => (
+                  <div
+                    key={conv.id}
+                    className="px-3 py-3 hover:bg-muted/50"
+                  >
+                    <div className="flex items-start gap-3">
+                      <Avatar className="h-10 w-10">
+                        {conv.organization?.logo_url && <AvatarImage src={conv.organization.logo_url} />}
+                        <AvatarFallback className="bg-muted text-muted-foreground text-sm">
+                          {conv.organization?.name?.charAt(0) || <Building2 className="h-4 w-4" />}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {conv.organization?.name || (conv.metadata as any)?.sender_name || 'زائر'}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{conv.last_message_preview}</p>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => { restoreConversation(conv.id); fetchArchivedConversations(); }}
+                          title="استعادة"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => { deleteConversation(conv.id); fetchArchivedConversations(); }}
+                            title="حذف نهائي"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           ) : activeTab === 'customers' && viewMode === 'grouped' && !selectedClient ? (
             /* Grouped Client View */
             groupedClients.length === 0 ? (
