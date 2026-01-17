@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Building2, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Building2, Mail, Lock, Eye, EyeOff, Loader2, Shield, Headphones } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,13 +10,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import webyanLogo from '@/assets/webyan-logo.svg';
-
-type UserType = 'admin' | 'editor' | 'staff' | 'client' | 'visitor' | null;
+import { rolesInfo, type AppRole } from '@/lib/permissions';
 
 export default function PortalLoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, signIn, authStatus } = useAuth();
+  const { user, signIn, authStatus, loading } = useAuth();
 
   const params = new URLSearchParams(location.search);
   const returnUrlParam = params.get('returnUrl');
@@ -26,66 +25,39 @@ export default function PortalLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
-  // Silent check: if a valid session exists, redirect quickly WITHOUT blocking UI.
+  // Redirect based on role after login
   useEffect(() => {
-    let cancelled = false;
-
-    const withTimeout = async <T,>(thenable: PromiseLike<T>, ms: number): Promise<T | null> => {
-      let timeoutId: number | undefined;
-      const timeout = new Promise<null>((resolve) => {
-        timeoutId = window.setTimeout(() => resolve(null), ms);
-      });
-
-      const result = (await Promise.race([Promise.resolve(thenable), timeout])) as T | null;
-      if (timeoutId) window.clearTimeout(timeoutId);
-      return result;
-    };
-
-    const redirectByType = (userType: UserType) => {
-      if (userType === 'admin' || userType === 'editor') {
-        navigate('/admin', { replace: true });
-        return;
-      }
-      if (userType === 'staff') {
-        navigate('/support', { replace: true });
-        return;
-      }
-      navigate(safeReturnUrl, { replace: true });
-    };
-
-    const run = async () => {
-      // Prefer user in context if already authenticated
-      if (authStatus === 'authenticated' && user) {
-        const rpcRes = await withTimeout(
-          supabase.rpc('get_user_type', { _user_id: user.id }),
-          800
-        );
-        const userType = (rpcRes as any)?.data?.[0]?.user_type as UserType | undefined;
-        if (!cancelled) redirectByType(userType || 'client');
-        return;
-      }
-
-      // Otherwise do a lightweight session check (no spinner)
-      const sessionRes = await withTimeout(supabase.auth.getSession(), 800);
-      const existingSession = (sessionRes as any)?.data?.session as any | null;
-      if (!existingSession?.user || cancelled) return;
-
-      const rpcRes = await withTimeout(
-        supabase.rpc('get_user_type', { _user_id: existingSession.user.id }),
-        800
-      );
-      const userType = (rpcRes as any)?.data?.[0]?.user_type as UserType | undefined;
-      if (!cancelled) redirectByType(userType || 'client');
-    };
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [authStatus, user, navigate, safeReturnUrl]);
+    if (user && !loading && authStatus === 'authenticated') {
+      setIsRedirecting(true);
+      
+      // Fetch user type and redirect accordingly
+      supabase.rpc('get_user_type', { _user_id: user.id })
+        .then(({ data, error: rpcError }) => {
+          if (rpcError || !data || data.length === 0) {
+            setIsRedirecting(false);
+            return;
+          }
+          
+          const userType = data[0]?.user_type as AppRole | null;
+          
+          if (userType && rolesInfo[userType]) {
+            const targetPath = rolesInfo[userType].dashboardPath;
+            // For clients, use the return URL if available
+            if (userType === 'client') {
+              navigate(safeReturnUrl, { replace: true });
+            } else {
+              navigate(targetPath, { replace: true });
+            }
+          } else {
+            setIsRedirecting(false);
+          }
+        });
+    }
+  }, [user, loading, authStatus, navigate, safeReturnUrl]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +68,7 @@ export default function PortalLoginPage() {
       return;
     }
 
-    setLoading(true);
+    setIsSubmitting(true);
 
     try {
       const { error: signInError } = await signIn(email, password);
@@ -119,6 +91,21 @@ export default function PortalLoginPage() {
         return;
       }
 
+      // Check user type
+      const { data: userTypeData } = await supabase.rpc('get_user_type', { _user_id: currentUser.id });
+      
+      if (userTypeData && userTypeData.length > 0) {
+        const userType = userTypeData[0]?.user_type as AppRole;
+        
+        // If user is not a client, redirect to appropriate portal
+        if (userType !== 'client' && rolesInfo[userType]) {
+          toast.info(`سيتم توجيهك إلى ${rolesInfo[userType].name === 'مدير' || rolesInfo[userType].name === 'محرر' ? 'لوحة التحكم' : 'بوابتك'}`);
+          navigate(rolesInfo[userType].dashboardPath, { replace: true });
+          return;
+        }
+      }
+
+      // For clients, check client_accounts
       const { data: clientAccount } = await supabase
         .from('client_accounts')
         .select('id, is_active')
@@ -148,9 +135,22 @@ export default function PortalLoginPage() {
       console.error('Login error:', error);
       setError('حدث خطأ أثناء تسجيل الدخول');
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
+
+  if (loading || isRedirecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">
+            {isRedirecting ? 'جاري التوجيه للبوابة المناسبة...' : 'جاري التحقق من الحساب...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50/50 to-background flex flex-col" dir="rtl">
@@ -203,7 +203,7 @@ export default function PortalLoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pr-10"
-                    disabled={loading}
+                    disabled={isSubmitting}
                     required
                   />
                 </div>
@@ -220,7 +220,7 @@ export default function PortalLoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pr-10 pl-10"
-                    disabled={loading}
+                    disabled={isSubmitting}
                     required
                   />
                   <button
@@ -237,9 +237,9 @@ export default function PortalLoginPage() {
               <Button
                 type="submit"
                 className="w-full bg-green-600 hover:bg-green-700 gap-2"
-                disabled={loading}
+                disabled={isSubmitting}
               >
-                {loading ? (
+                {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     جاري تسجيل الدخول...
@@ -267,12 +267,23 @@ export default function PortalLoginPage() {
             >
               نسيت كلمة المرور؟
             </Link>
-            <p className="text-sm text-muted-foreground">
-              لست عميلاً؟{' '}
-              <Link to="/submit-ticket" className="text-primary hover:underline">
-                تواصل معنا
-              </Link>
-            </p>
+            <div className="flex flex-col gap-2 w-full">
+              <p className="text-sm text-muted-foreground">هل أنت موظف أو مدير؟</p>
+              <div className="flex gap-2">
+                <Button variant="outline" asChild className="flex-1 gap-1">
+                  <Link to="/admin/login">
+                    <Shield className="h-4 w-4" />
+                    لوحة التحكم
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild className="flex-1 gap-1">
+                  <Link to="/support/login">
+                    <Headphones className="h-4 w-4" />
+                    بوابة الدعم
+                  </Link>
+                </Button>
+              </div>
+            </div>
           </CardFooter>
         </Card>
       </main>

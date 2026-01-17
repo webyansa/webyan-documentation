@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import {
   LayoutDashboard,
   FileText,
@@ -16,14 +15,10 @@ import {
   Users,
   Settings,
   Menu,
-  X,
   LogOut,
-  ChevronDown,
-  ChevronLeft,
   Ticket,
   Building2,
   Calendar,
-  Clock,
   UserCog,
   CalendarDays,
   Zap,
@@ -33,17 +28,13 @@ import {
   Home,
   Loader2,
   Archive,
-  Headphones,
-  FileEdit,
   Shield
 } from 'lucide-react';
 import { ChatNotificationDropdown } from '@/components/layout/ChatNotificationDropdown';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,27 +45,28 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import webyanLogo from '@/assets/webyan-logo.svg';
+import { rolePermissions, rolesInfo, type AppRole, type RolePermissions } from '@/lib/permissions';
 
 interface NavItem {
   title: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: number;
-  requiredRole?: 'admin' | 'editor';
+  permission?: keyof RolePermissions;
 }
 
 interface NavSection {
   title: string;
   items: NavItem[];
-  adminOnly?: boolean;
+  sectionPermission?: keyof RolePermissions;
 }
 
 // Dashboard Section
 const dashboardSection: NavSection = {
   title: 'الرئيسية',
   items: [
-    { title: 'لوحة التحكم', href: '/admin', icon: LayoutDashboard },
-    { title: 'التقارير والإحصائيات', href: '/admin/reports', icon: BarChart3, requiredRole: 'admin' },
+    { title: 'لوحة التحكم', href: '/admin', icon: LayoutDashboard, permission: 'canAccessAdminDashboard' },
+    { title: 'التقارير والإحصائيات', href: '/admin/reports', icon: BarChart3, permission: 'canViewReports' },
   ]
 };
 
@@ -82,86 +74,86 @@ const dashboardSection: NavSection = {
 const contentSection: NavSection = {
   title: 'إدارة المحتوى',
   items: [
-    { title: 'المقالات', href: '/admin/articles', icon: FileText },
-    { title: 'شجرة المحتوى', href: '/admin/content-tree', icon: FolderTree },
-    { title: 'الوسائط', href: '/admin/media', icon: Image },
-    { title: 'الوسوم', href: '/admin/tags', icon: Tags },
-    { title: 'سجل التحديثات', href: '/admin/changelog', icon: History },
+    { title: 'المقالات', href: '/admin/articles', icon: FileText, permission: 'canManageArticles' },
+    { title: 'شجرة المحتوى', href: '/admin/content-tree', icon: FolderTree, permission: 'canManageContentTree' },
+    { title: 'الوسائط', href: '/admin/media', icon: Image, permission: 'canManageMedia' },
+    { title: 'الوسوم', href: '/admin/tags', icon: Tags, permission: 'canManageTags' },
+    { title: 'سجل التحديثات', href: '/admin/changelog', icon: History, permission: 'canManageChangelog' },
   ]
 };
 
 // Chat & Conversations Section
 const chatSection: NavSection = {
   title: 'المحادثات',
-  adminOnly: true,
+  sectionPermission: 'canViewAllChats',
   items: [
-    { title: 'صندوق الوارد', href: '/admin/chat', icon: MessageSquare, requiredRole: 'admin' },
-    { title: 'المحادثات المؤرشفة', href: '/admin/archived-chats', icon: Archive, requiredRole: 'admin' },
-    { title: 'الردود السريعة', href: '/admin/quick-replies', icon: Zap, requiredRole: 'admin' },
-    { title: 'إعدادات الشات', href: '/admin/chat-settings', icon: Settings, requiredRole: 'admin' },
-    { title: 'تضمين الدردشة', href: '/admin/chat-embed', icon: Code2, requiredRole: 'admin' },
+    { title: 'صندوق الوارد', href: '/admin/chat', icon: MessageSquare, permission: 'canViewAllChats' },
+    { title: 'المحادثات المؤرشفة', href: '/admin/archived-chats', icon: Archive, permission: 'canViewAllChats' },
+    { title: 'الردود السريعة', href: '/admin/quick-replies', icon: Zap, permission: 'canManageQuickReplies' },
+    { title: 'إعدادات الشات', href: '/admin/chat-settings', icon: Settings, permission: 'canManageSystemSettings' },
+    { title: 'تضمين الدردشة', href: '/admin/chat-embed', icon: Code2, permission: 'canManageEmbedSettings' },
   ]
 };
 
 // Support Tickets Section
 const ticketsSection: NavSection = {
   title: 'تذاكر الدعم',
-  adminOnly: true,
+  sectionPermission: 'canViewAllTickets',
   items: [
-    { title: 'جميع التذاكر', href: '/admin/tickets', icon: Ticket, requiredRole: 'admin' },
-    { title: 'إعدادات التصعيد', href: '/admin/escalation-settings', icon: AlertTriangle, requiredRole: 'admin' },
-    { title: 'البلاغات', href: '/admin/issues', icon: AlertTriangle, requiredRole: 'admin' },
+    { title: 'جميع التذاكر', href: '/admin/tickets', icon: Ticket, permission: 'canViewAllTickets' },
+    { title: 'إعدادات التصعيد', href: '/admin/escalation-settings', icon: AlertTriangle, permission: 'canManageEscalation' },
+    { title: 'البلاغات', href: '/admin/issues', icon: AlertTriangle, permission: 'canViewAllTickets' },
   ]
 };
 
 // Meetings Section
 const meetingsSection: NavSection = {
   title: 'الاجتماعات',
-  adminOnly: true,
+  sectionPermission: 'canViewAllMeetings',
   items: [
-    { title: 'طلبات الاجتماعات', href: '/admin/meetings', icon: CalendarDays, requiredRole: 'admin' },
-    { title: 'إعدادات المواعيد', href: '/admin/meeting-settings', icon: Calendar, requiredRole: 'admin' },
+    { title: 'طلبات الاجتماعات', href: '/admin/meetings', icon: CalendarDays, permission: 'canViewAllMeetings' },
+    { title: 'إعدادات المواعيد', href: '/admin/meeting-settings', icon: Calendar, permission: 'canManageMeetingSettings' },
   ]
 };
 
 // Clients Section
 const clientsSection: NavSection = {
   title: 'العملاء',
-  adminOnly: true,
+  sectionPermission: 'canManageClients',
   items: [
-    { title: 'إدارة العملاء', href: '/admin/clients', icon: Building2, requiredRole: 'admin' },
-    { title: 'التقييمات', href: '/admin/feedback', icon: ThumbsUp, requiredRole: 'admin' },
-    { title: 'إعدادات التضمين', href: '/admin/embed-settings', icon: Code2, requiredRole: 'admin' },
+    { title: 'إدارة العملاء', href: '/admin/clients', icon: Building2, permission: 'canManageClients' },
+    { title: 'التقييمات', href: '/admin/feedback', icon: ThumbsUp, permission: 'canManageClients' },
+    { title: 'إعدادات التضمين', href: '/admin/embed-settings', icon: Code2, permission: 'canManageEmbedSettings' },
   ]
 };
 
 // Staff Management Section
 const staffSection: NavSection = {
   title: 'فريق العمل',
-  adminOnly: true,
+  sectionPermission: 'canManageStaff',
   items: [
-    { title: 'الموظفين', href: '/admin/staff', icon: UserCog, requiredRole: 'admin' },
-    { title: 'أداء الموظفين', href: '/admin/staff-performance', icon: BarChart3, requiredRole: 'admin' },
+    { title: 'الموظفين', href: '/admin/staff', icon: UserCog, permission: 'canManageStaff' },
+    { title: 'أداء الموظفين', href: '/admin/staff-performance', icon: BarChart3, permission: 'canViewStaffPerformance' },
   ]
 };
 
 // System Settings Section
 const settingsSection: NavSection = {
   title: 'النظام',
-  adminOnly: true,
+  sectionPermission: 'canManageSystemSettings',
   items: [
-    { title: 'المستخدمين', href: '/admin/users', icon: Users, requiredRole: 'admin' },
-    { title: 'الأدوار والصلاحيات', href: '/admin/roles', icon: Shield, requiredRole: 'admin' },
-    { title: 'سجل النشاط', href: '/admin/activity-log', icon: History, requiredRole: 'admin' },
-    { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, requiredRole: 'admin' },
-    { title: 'الإعدادات العامة', href: '/admin/settings', icon: Settings, requiredRole: 'admin' },
+    { title: 'المستخدمين', href: '/admin/users', icon: Users, permission: 'canManageUsers' },
+    { title: 'الأدوار والصلاحيات', href: '/admin/roles', icon: Shield, permission: 'canManageRoles' },
+    { title: 'سجل النشاط', href: '/admin/activity-log', icon: History, permission: 'canViewActivityLogs' },
+    { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, permission: 'canViewSearchLogs' },
+    { title: 'الإعدادات العامة', href: '/admin/settings', icon: Settings, permission: 'canManageSystemSettings' },
   ]
 };
 
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, role, loading, signOut, isAdmin, isAdminOrEditor, isSupportAgent } = useAuth();
+  const { user, role, loading, signOut, isAdminOrEditor } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
@@ -181,6 +173,10 @@ export default function AdminLayout() {
     navigate('/admin/login');
   };
 
+  // Get current user's permissions
+  const currentRole = role as AppRole | null;
+  const permissions = currentRole ? rolePermissions[currentRole] : null;
+
   // Show loading while auth is being checked
   if (loading) {
     return (
@@ -199,29 +195,17 @@ export default function AdminLayout() {
   }
 
   const getRoleLabel = () => {
-    switch (role) {
-      case 'admin':
-        return 'مدير';
-      case 'editor':
-        return 'محرر';
-      case 'support_agent':
-        return 'موظف دعم فني';
-      default:
-        return 'زائر';
+    if (currentRole && rolesInfo[currentRole]) {
+      return rolesInfo[currentRole].name;
     }
+    return 'زائر';
   };
 
   const getRoleBadgeColor = () => {
-    switch (role) {
-      case 'admin':
-        return 'bg-red-100 text-red-700';
-      case 'editor':
-        return 'bg-blue-100 text-blue-700';
-      case 'support_agent':
-        return 'bg-orange-100 text-orange-700';
-      default:
-        return 'bg-gray-100 text-gray-700';
+    if (currentRole && rolesInfo[currentRole]) {
+      return rolesInfo[currentRole].badgeColor;
     }
+    return 'bg-gray-100 text-gray-700';
   };
 
   const allSections = [
@@ -235,13 +219,29 @@ export default function AdminLayout() {
     settingsSection
   ];
   
+  // Filter sections and items based on permissions
   const getFilteredSections = () => {
-    return allSections.map(section => ({
-      ...section,
-      items: section.items.filter(item => 
-        !item.requiredRole || (item.requiredRole === 'admin' && isAdmin)
-      )
-    })).filter(section => !section.adminOnly || isAdmin);
+    if (!permissions) return [];
+    
+    return allSections
+      .filter(section => {
+        // If section has a permission requirement, check it
+        if (section.sectionPermission) {
+          return permissions[section.sectionPermission];
+        }
+        return true;
+      })
+      .map(section => ({
+        ...section,
+        items: section.items.filter(item => {
+          // If item has a permission requirement, check it
+          if (item.permission) {
+            return permissions[item.permission];
+          }
+          return true;
+        })
+      }))
+      .filter(section => section.items.length > 0); // Remove empty sections
   };
   
   const filteredSections = getFilteredSections();
@@ -268,7 +268,9 @@ export default function AdminLayout() {
 
           <div className="flex items-center gap-4">
             {/* Chat notifications (داخل لوحة التحكم فقط) */}
-            <ChatNotificationDropdown userType="admin" linkTo="/admin/chat" />
+            {permissions?.canViewAllChats && (
+              <ChatNotificationDropdown userType="admin" linkTo="/admin/chat" />
+            )}
 
             <Link to="/">
               <Button variant="outline" size="sm" className="gap-2">
