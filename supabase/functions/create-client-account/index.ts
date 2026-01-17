@@ -192,7 +192,7 @@ Deno.serve(async (req) => {
                   </div>
                   
                   <div style="text-align: center; margin-top: 30px;">
-                    <a href="${req.headers.get('origin') || 'https://webyan.com'}/portal-login" 
+                    <a href="${req.headers.get('origin') || 'https://webyan.com'}/portal/login" 
                        style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">
                       الدخول للبوابة
                     </a>
