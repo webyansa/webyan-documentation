@@ -1040,6 +1040,16 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                     <Button 
                       variant="ghost" 
                       size="icon" 
+                      className="h-8 w-8 text-amber-500 hover:text-amber-600"
+                      onClick={() => archiveConversation(currentConversation.id)}
+                      title="نقل إلى المهملات"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                    
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
                       className="h-8 w-8 text-red-500 hover:text-red-600"
                       onClick={() => closeConversation(currentConversation.id)}
                       title="إغلاق"
@@ -1050,15 +1060,26 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                 )}
                 
                 {currentConversation.status === 'closed' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    className="h-8 text-xs gap-1.5"
-                    onClick={() => reopenConversation(currentConversation.id)}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    إعادة فتح
-                  </Button>
+                  <>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="h-8 text-xs gap-1.5"
+                      onClick={() => reopenConversation(currentConversation.id)}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      إعادة فتح
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-amber-500 hover:text-amber-600"
+                      onClick={() => archiveConversation(currentConversation.id)}
+                      title="نقل إلى المهملات"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
                 )}
 
                 <Button
