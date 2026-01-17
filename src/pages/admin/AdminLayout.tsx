@@ -31,7 +31,11 @@ import {
   MessageSquare,
   BookOpen,
   Home,
-  Loader2
+  Loader2,
+  Archive,
+  Headphones,
+  FileEdit,
+  Shield
 } from 'lucide-react';
 import { ChatNotificationDropdown } from '@/components/layout/ChatNotificationDropdown';
 import { Button } from '@/components/ui/button';
@@ -65,11 +69,19 @@ interface NavSection {
   adminOnly?: boolean;
 }
 
-// Content Section - Documentation related
-const contentSection: NavSection = {
-  title: 'المحتوى',
+// Dashboard Section
+const dashboardSection: NavSection = {
+  title: 'الرئيسية',
   items: [
     { title: 'لوحة التحكم', href: '/admin', icon: LayoutDashboard },
+    { title: 'التقارير والإحصائيات', href: '/admin/reports', icon: BarChart3, requiredRole: 'admin' },
+  ]
+};
+
+// Content Section - Documentation related
+const contentSection: NavSection = {
+  title: 'إدارة المحتوى',
+  items: [
     { title: 'المقالات', href: '/admin/articles', icon: FileText },
     { title: 'شجرة المحتوى', href: '/admin/content-tree', icon: FolderTree },
     { title: 'الوسائط', href: '/admin/media', icon: Image },
@@ -78,37 +90,69 @@ const contentSection: NavSection = {
   ]
 };
 
-// Clients Section - All client related features
-const clientsSection: NavSection = {
-  title: 'العملاء',
+// Chat & Conversations Section
+const chatSection: NavSection = {
+  title: 'المحادثات',
   adminOnly: true,
   items: [
-    { title: 'إدارة العملاء', href: '/admin/clients', icon: Users, requiredRole: 'admin' },
-    { title: 'تذاكر الدعم', href: '/admin/tickets', icon: Ticket, requiredRole: 'admin' },
-    { title: 'إدارة المحادثات', href: '/admin/chat', icon: MessageSquare, requiredRole: 'admin' },
+    { title: 'صندوق الوارد', href: '/admin/chat', icon: MessageSquare, requiredRole: 'admin' },
+    { title: 'المحادثات المؤرشفة', href: '/admin/archived-chats', icon: Archive, requiredRole: 'admin' },
     { title: 'الردود السريعة', href: '/admin/quick-replies', icon: Zap, requiredRole: 'admin' },
     { title: 'إعدادات الشات', href: '/admin/chat-settings', icon: Settings, requiredRole: 'admin' },
     { title: 'تضمين الدردشة', href: '/admin/chat-embed', icon: Code2, requiredRole: 'admin' },
-    { title: 'طلبات الاجتماعات', href: '/admin/meetings', icon: CalendarDays, requiredRole: 'admin' },
-    { title: 'إعدادات المواعيد', href: '/admin/meeting-settings', icon: Settings, requiredRole: 'admin' },
-    { title: 'التقييمات', href: '/admin/feedback', icon: ThumbsUp, requiredRole: 'admin' },
+  ]
+};
+
+// Support Tickets Section
+const ticketsSection: NavSection = {
+  title: 'تذاكر الدعم',
+  adminOnly: true,
+  items: [
+    { title: 'جميع التذاكر', href: '/admin/tickets', icon: Ticket, requiredRole: 'admin' },
+    { title: 'إعدادات التصعيد', href: '/admin/escalation-settings', icon: AlertTriangle, requiredRole: 'admin' },
     { title: 'البلاغات', href: '/admin/issues', icon: AlertTriangle, requiredRole: 'admin' },
   ]
 };
 
-// Management Section - System management
-const managementSection: NavSection = {
-  title: 'الإدارة',
+// Meetings Section
+const meetingsSection: NavSection = {
+  title: 'الاجتماعات',
+  adminOnly: true,
+  items: [
+    { title: 'طلبات الاجتماعات', href: '/admin/meetings', icon: CalendarDays, requiredRole: 'admin' },
+    { title: 'إعدادات المواعيد', href: '/admin/meeting-settings', icon: Calendar, requiredRole: 'admin' },
+  ]
+};
+
+// Clients Section
+const clientsSection: NavSection = {
+  title: 'العملاء',
+  adminOnly: true,
+  items: [
+    { title: 'إدارة العملاء', href: '/admin/clients', icon: Building2, requiredRole: 'admin' },
+    { title: 'التقييمات', href: '/admin/feedback', icon: ThumbsUp, requiredRole: 'admin' },
+    { title: 'إعدادات التضمين', href: '/admin/embed-settings', icon: Code2, requiredRole: 'admin' },
+  ]
+};
+
+// Staff Management Section
+const staffSection: NavSection = {
+  title: 'فريق العمل',
   adminOnly: true,
   items: [
     { title: 'الموظفين', href: '/admin/staff', icon: UserCog, requiredRole: 'admin' },
     { title: 'أداء الموظفين', href: '/admin/staff-performance', icon: BarChart3, requiredRole: 'admin' },
-    { title: 'إعدادات التصعيد', href: '/admin/escalation-settings', icon: AlertTriangle, requiredRole: 'admin' },
-    { title: 'إعدادات التضمين', href: '/admin/embed-settings', icon: FolderTree, requiredRole: 'admin' },
-    { title: 'التقارير', href: '/admin/reports', icon: BarChart3, requiredRole: 'admin' },
-    { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, requiredRole: 'admin' },
+  ]
+};
+
+// System Settings Section
+const settingsSection: NavSection = {
+  title: 'النظام',
+  adminOnly: true,
+  items: [
     { title: 'المستخدمين', href: '/admin/users', icon: Users, requiredRole: 'admin' },
-    { title: 'الإعدادات', href: '/admin/settings', icon: Settings, requiredRole: 'admin' },
+    { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, requiredRole: 'admin' },
+    { title: 'الإعدادات العامة', href: '/admin/settings', icon: Settings, requiredRole: 'admin' },
   ]
 };
 
@@ -165,7 +209,16 @@ export default function AdminLayout() {
     }
   };
 
-  const allSections = [contentSection, clientsSection, managementSection];
+  const allSections = [
+    dashboardSection,
+    contentSection,
+    chatSection,
+    ticketsSection,
+    meetingsSection,
+    clientsSection,
+    staffSection,
+    settingsSection
+  ];
   
   const getFilteredSections = () => {
     return allSections.map(section => ({

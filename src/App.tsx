@@ -50,6 +50,7 @@ import ChatSettingsPage from "./pages/admin/ChatSettingsPage";
 import AdminChatPage from "./pages/admin/AdminChatPage";
 import QuickRepliesPage from "./pages/admin/QuickRepliesPage";
 import ChatEmbedSettingsPage from "./pages/admin/ChatEmbedSettingsPage";
+import ArchivedChatsPage from "./pages/admin/ArchivedChatsPage";
 import EmbedChatPage from "./pages/embed/EmbedChatPage";
 
 // Client Portal pages
@@ -155,6 +156,7 @@ const App = () => (
                 <Route path="chat" element={<AdminChatPage />} />
                 <Route path="quick-replies" element={<QuickRepliesPage />} />
                 <Route path="chat-embed" element={<ChatEmbedSettingsPage />} />
+                <Route path="archived-chats" element={<ArchivedChatsPage />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />
