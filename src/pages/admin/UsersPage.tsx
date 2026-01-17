@@ -151,7 +151,7 @@ export default function UsersPage() {
         // Add role
         await supabase
           .from('user_roles')
-          .insert({ user_id: authData.user.id, role: newUserRole });
+          .insert({ user_id: authData.user.id, role: newUserRole } as any);
 
         toast.success('تم إضافة المستخدم بنجاح');
         setAddDialogOpen(false);
@@ -300,7 +300,7 @@ export default function UsersPage() {
 
       const { error } = await supabase
         .from('user_roles')
-        .insert({ user_id: userId, role: newRole });
+        .insert({ user_id: userId, role: newRole } as any);
 
       if (error) throw error;
 

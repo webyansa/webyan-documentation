@@ -32,97 +32,31 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Users, 
   Loader2, 
-  Shield, 
-  UserCheck, 
-  Eye, 
-  Headphones, 
   Search,
-  AlertTriangle,
   CheckCircle2,
   XCircle,
-  Info
+  Info,
+  AlertTriangle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-
-type AppRole = 'admin' | 'editor' | 'viewer' | 'support_agent';
+import { 
+  AppRole, 
+  rolesInfo, 
+  rolePermissions, 
+  allRoles,
+  RolePermissions,
+} from '@/lib/permissions';
 
 interface UserWithRole {
   id: string;
   email: string | null;
   full_name: string | null;
   created_at: string;
-  role: AppRole;
+  role: AppRole | null;
 }
-
-interface RoleInfo {
-  name: string;
-  description: string;
-  permissions: string[];
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-  badgeColor: string;
-}
-
-const rolesInfo: Record<AppRole, RoleInfo> = {
-  admin: {
-    name: 'مدير',
-    description: 'صلاحيات كاملة للوصول إلى جميع أجزاء النظام',
-    permissions: [
-      'الوصول الكامل للوحة التحكم',
-      'إدارة المستخدمين والصلاحيات',
-      'إدارة المحتوى والمقالات',
-      'إدارة تذاكر الدعم والمحادثات',
-      'إدارة الاجتماعات والعملاء',
-      'عرض التقارير والإحصائيات',
-      'تعديل إعدادات النظام',
-    ],
-    icon: Shield,
-    color: 'text-red-600',
-    badgeColor: 'bg-red-100 text-red-700',
-  },
-  editor: {
-    name: 'محرر',
-    description: 'صلاحيات إدارة المحتوى والمقالات',
-    permissions: [
-      'الوصول للوحة التحكم',
-      'إنشاء وتعديل المقالات',
-      'إدارة شجرة المحتوى',
-      'رفع الوسائط والملفات',
-      'إدارة الوسوم',
-    ],
-    icon: UserCheck,
-    color: 'text-blue-600',
-    badgeColor: 'bg-blue-100 text-blue-700',
-  },
-  support_agent: {
-    name: 'موظف دعم فني',
-    description: 'صلاحيات الرد على التذاكر والمحادثات',
-    permissions: [
-      'الوصول لبوابة الموظفين',
-      'الرد على تذاكر الدعم المُسندة',
-      'المشاركة في المحادثات',
-      'حضور الاجتماعات المُسندة',
-      'عرض بيانات العملاء المرتبطة',
-    ],
-    icon: Headphones,
-    color: 'text-orange-600',
-    badgeColor: 'bg-orange-100 text-orange-700',
-  },
-  viewer: {
-    name: 'زائر',
-    description: 'صلاحيات محدودة للعرض فقط',
-    permissions: [
-      'عرض الدليل العام',
-      'تصفح المقالات المنشورة',
-    ],
-    icon: Eye,
-    color: 'text-gray-600',
-    badgeColor: 'bg-gray-100 text-gray-700',
-  },
-};
 
 export default function RolesManagementPage() {
   const { user: currentUser } = useAuth();
@@ -135,7 +69,7 @@ export default function RolesManagementPage() {
     open: boolean;
     userId: string;
     userName: string;
-    oldRole: AppRole;
+    oldRole: AppRole | null;
     newRole: AppRole;
   } | null>(null);
 
@@ -163,7 +97,7 @@ export default function RolesManagementPage() {
 
         usersWithRoles.push({
           ...profile,
-          role: (roleData?.role as AppRole) || 'viewer',
+          role: (roleData?.role as AppRole) || null,
         });
       }
 
@@ -197,18 +131,22 @@ export default function RolesManagementPage() {
         .delete()
         .eq('user_id', userId);
 
-      // Insert new role
-      const { error } = await supabase
-        .from('user_roles')
-        .insert({ user_id: userId, role: newRole });
+      // Insert new role (only if not null/removing)
+      if (newRole) {
+        const { error } = await supabase
+          .from('user_roles')
+          .insert({ user_id: userId, role: newRole } as any);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
       );
       
-      toast.success(`تم تغيير الصلاحية من "${rolesInfo[oldRole].name}" إلى "${rolesInfo[newRole].name}"`);
+      const oldRoleName = oldRole ? rolesInfo[oldRole].name : 'بدون دور';
+      const newRoleName = rolesInfo[newRole].name;
+      toast.success(`تم تغيير الصلاحية من "${oldRoleName}" إلى "${newRoleName}"`);
     } catch (error) {
       console.error('Error updating role:', error);
       toast.error('حدث خطأ أثناء تحديث الصلاحية');
@@ -229,7 +167,15 @@ export default function RolesManagementPage() {
     });
   };
 
-  const getRoleBadge = (role: AppRole) => {
+  const getRoleBadge = (role: AppRole | null) => {
+    if (!role) {
+      return (
+        <Badge variant="outline" className="gap-1 text-muted-foreground">
+          <XCircle className="h-3 w-3" />
+          بدون دور
+        </Badge>
+      );
+    }
     const info = rolesInfo[role];
     const Icon = info.icon;
     return (
@@ -250,12 +196,49 @@ export default function RolesManagementPage() {
     return matchesSearch && matchesRole;
   });
 
-  const roleStats = {
+  const roleStats: Record<AppRole | 'none', number> = {
     admin: users.filter(u => u.role === 'admin').length,
     editor: users.filter(u => u.role === 'editor').length,
     support_agent: users.filter(u => u.role === 'support_agent').length,
-    viewer: users.filter(u => u.role === 'viewer').length,
+    client: users.filter(u => u.role === 'client').length,
+    none: users.filter(u => !u.role).length,
   };
+
+  // Permission labels for matrix
+  const permissionLabels: { key: keyof RolePermissions; label: string; category: string }[] = [
+    // Admin Dashboard
+    { key: 'canAccessAdminDashboard', label: 'الوصول للوحة التحكم', category: 'لوحة التحكم' },
+    { key: 'canViewReports', label: 'عرض التقارير والإحصائيات', category: 'لوحة التحكم' },
+    // User Management
+    { key: 'canManageUsers', label: 'إدارة المستخدمين', category: 'إدارة المستخدمين' },
+    { key: 'canManageRoles', label: 'إدارة الأدوار والصلاحيات', category: 'إدارة المستخدمين' },
+    // Content Management
+    { key: 'canManageArticles', label: 'إدارة المقالات', category: 'إدارة المحتوى' },
+    { key: 'canManageContentTree', label: 'إدارة شجرة المحتوى', category: 'إدارة المحتوى' },
+    { key: 'canManageMedia', label: 'إدارة الوسائط', category: 'إدارة المحتوى' },
+    { key: 'canManageTags', label: 'إدارة الوسوم', category: 'إدارة المحتوى' },
+    // Support (Admin)
+    { key: 'canViewAllTickets', label: 'عرض جميع التذاكر', category: 'الدعم الفني' },
+    { key: 'canViewAllChats', label: 'عرض جميع المحادثات', category: 'الدعم الفني' },
+    { key: 'canViewAllMeetings', label: 'عرض جميع الاجتماعات', category: 'الدعم الفني' },
+    { key: 'canManageEscalation', label: 'إدارة التصعيد', category: 'الدعم الفني' },
+    // Client Management
+    { key: 'canManageClients', label: 'إدارة العملاء', category: 'العملاء' },
+    { key: 'canManageStaff', label: 'إدارة الموظفين', category: 'الموظفين' },
+    // System
+    { key: 'canManageSystemSettings', label: 'الإعدادات العامة', category: 'النظام' },
+    { key: 'canViewActivityLogs', label: 'سجل النشاط', category: 'النظام' },
+    // Support Portal
+    { key: 'canAccessSupportPortal', label: 'الوصول لبوابة الدعم', category: 'بوابة الدعم' },
+    { key: 'canReplyToAssignedTickets', label: 'الرد على التذاكر الموجهة', category: 'بوابة الدعم' },
+    { key: 'canManageAssignedChats', label: 'إدارة المحادثات الموجهة', category: 'بوابة الدعم' },
+    { key: 'canAttendAssignedMeetings', label: 'حضور الاجتماعات الموجهة', category: 'بوابة الدعم' },
+    // Client Portal
+    { key: 'canAccessClientPortal', label: 'الوصول لبوابة العملاء', category: 'بوابة العملاء' },
+    { key: 'canCreateTickets', label: 'فتح تذاكر الدعم', category: 'بوابة العملاء' },
+    { key: 'canCreateChats', label: 'بدء محادثات', category: 'بوابة العملاء' },
+    { key: 'canRequestMeetings', label: 'طلب اجتماعات', category: 'بوابة العملاء' },
+  ];
 
   if (loading) {
     return (
@@ -283,12 +266,17 @@ export default function RolesManagementPage() {
 
         <TabsContent value="users" className="space-y-6">
           {/* Stats */}
-          <div className="grid gap-4 md:grid-cols-4">
-            {(Object.entries(roleStats) as [AppRole, number][]).map(([role, count]) => {
+          <div className="grid gap-4 md:grid-cols-5">
+            {allRoles.map((role) => {
               const info = rolesInfo[role];
               const Icon = info.icon;
+              const count = roleStats[role];
               return (
-                <Card key={role} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setFilterRole(filterRole === role ? 'all' : role)}>
+                <Card 
+                  key={role} 
+                  className="cursor-pointer hover:bg-muted/50 transition-colors" 
+                  onClick={() => setFilterRole(filterRole === role ? 'all' : role)}
+                >
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium flex items-center gap-2">
                       <Icon className={`h-4 w-4 ${info.color}`} />
@@ -301,6 +289,20 @@ export default function RolesManagementPage() {
                 </Card>
               );
             })}
+            <Card 
+              className="cursor-pointer hover:bg-muted/50 transition-colors border-dashed" 
+              onClick={() => setFilterRole('all')}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <XCircle className="h-4 w-4 text-muted-foreground" />
+                  بدون دور
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{roleStats.none}</div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Filters */}
@@ -322,8 +324,8 @@ export default function RolesManagementPage() {
                 <SelectItem value="all">جميع الأدوار</SelectItem>
                 <SelectItem value="admin">المدراء</SelectItem>
                 <SelectItem value="editor">المحررين</SelectItem>
-                <SelectItem value="support_agent">موظفي الدعم</SelectItem>
-                <SelectItem value="viewer">الزوار</SelectItem>
+                <SelectItem value="support_agent">الدعم الفني</SelectItem>
+                <SelectItem value="client">العملاء</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -380,8 +382,12 @@ export default function RolesManagementPage() {
                             <span className="text-muted-foreground text-sm">-</span>
                           ) : (
                             <Select
-                              value={user.role}
-                              onValueChange={(v) => openConfirmDialog(user, v as AppRole)}
+                              value={user.role || 'none'}
+                              onValueChange={(v) => {
+                                if (v !== 'none') {
+                                  openConfirmDialog(user, v as AppRole);
+                                }
+                              }}
                               disabled={updating === user.id}
                             >
                               <SelectTrigger className="w-[150px]">
@@ -394,8 +400,9 @@ export default function RolesManagementPage() {
                               <SelectContent>
                                 <SelectItem value="admin">مدير</SelectItem>
                                 <SelectItem value="editor">محرر</SelectItem>
-                                <SelectItem value="support_agent">موظف دعم فني</SelectItem>
-                                <SelectItem value="viewer">زائر</SelectItem>
+                                <SelectItem value="support_agent">دعم فني</SelectItem>
+                                <SelectItem value="client">عميل</SelectItem>
+                                <SelectItem value="none" disabled>بدون دور</SelectItem>
                               </SelectContent>
                             </Select>
                           )}
@@ -413,9 +420,14 @@ export default function RolesManagementPage() {
         </TabsContent>
 
         <TabsContent value="roles" className="space-y-6">
+          {/* Role Cards */}
           <div className="grid gap-6 md:grid-cols-2">
-            {(Object.entries(rolesInfo) as [AppRole, RoleInfo][]).map(([role, info]) => {
+            {allRoles.map((role) => {
+              const info = rolesInfo[role];
               const Icon = info.icon;
+              const permissions = rolePermissions[role];
+              const enabledCount = Object.values(permissions).filter(Boolean).length;
+              
               return (
                 <Card key={role}>
                   <CardHeader>
@@ -423,26 +435,29 @@ export default function RolesManagementPage() {
                       <div className={`p-2 rounded-lg ${info.badgeColor}`}>
                         <Icon className="h-5 w-5" />
                       </div>
-                      {info.name}
+                      <div>
+                        {info.name}
+                        <span className="text-sm font-normal text-muted-foreground mr-2">
+                          ({info.nameEnglish})
+                        </span>
+                      </div>
                     </CardTitle>
                     <CardDescription>{info.description}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-muted-foreground mb-3">الصلاحيات:</p>
-                      <ul className="space-y-2">
-                        {info.permissions.map((perm, idx) => (
-                          <li key={idx} className="flex items-center gap-2 text-sm">
-                            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                            {perm}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div className="mt-4 pt-4 border-t">
-                      <p className="text-sm text-muted-foreground">
-                        عدد المستخدمين: <span className="font-bold text-foreground">{roleStats[role]}</span>
-                      </p>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">البوابة:</span>
+                        <Badge variant="outline">{info.dashboardPath}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">صلاحيات مفعّلة:</span>
+                        <span className="font-bold">{enabledCount} صلاحية</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">عدد المستخدمين:</span>
+                        <span className="font-bold">{roleStats[role]}</span>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -450,7 +465,7 @@ export default function RolesManagementPage() {
             })}
           </div>
 
-          {/* Role Matrix */}
+          {/* Permission Matrix */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -468,55 +483,39 @@ export default function RolesManagementPage() {
                     <TableHead className="w-[250px]">الصلاحية</TableHead>
                     <TableHead className="text-center">مدير</TableHead>
                     <TableHead className="text-center">محرر</TableHead>
-                    <TableHead className="text-center">موظف دعم</TableHead>
-                    <TableHead className="text-center">زائر</TableHead>
+                    <TableHead className="text-center">دعم فني</TableHead>
+                    <TableHead className="text-center">عميل</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {[
-                    { label: 'لوحة التحكم الرئيسية', admin: true, editor: true, support_agent: false, viewer: false },
-                    { label: 'بوابة الموظفين', admin: true, editor: false, support_agent: true, viewer: false },
-                    { label: 'إدارة المستخدمين', admin: true, editor: false, support_agent: false, viewer: false },
-                    { label: 'إدارة المحتوى', admin: true, editor: true, support_agent: false, viewer: false },
-                    { label: 'تذاكر الدعم', admin: true, editor: false, support_agent: true, viewer: false },
-                    { label: 'المحادثات', admin: true, editor: false, support_agent: true, viewer: false },
-                    { label: 'الاجتماعات', admin: true, editor: false, support_agent: true, viewer: false },
-                    { label: 'إدارة العملاء', admin: true, editor: false, support_agent: false, viewer: false },
-                    { label: 'التقارير', admin: true, editor: false, support_agent: false, viewer: false },
-                    { label: 'إعدادات النظام', admin: true, editor: false, support_agent: false, viewer: false },
-                  ].map((row, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-medium">{row.label}</TableCell>
-                      <TableCell className="text-center">
-                        {row.admin ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-red-300 mx-auto" />
+                  {permissionLabels.map((perm, idx) => {
+                    const prevCategory = idx > 0 ? permissionLabels[idx - 1].category : null;
+                    const showCategoryRow = perm.category !== prevCategory;
+                    
+                    return (
+                      <>
+                        {showCategoryRow && (
+                          <TableRow key={`cat-${perm.category}`} className="bg-muted/50">
+                            <TableCell colSpan={5} className="font-semibold text-sm">
+                              {perm.category}
+                            </TableCell>
+                          </TableRow>
                         )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {row.editor ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-red-300 mx-auto" />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {row.support_agent ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-red-300 mx-auto" />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {row.viewer ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-red-300 mx-auto" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        <TableRow key={perm.key}>
+                          <TableCell className="text-sm">{perm.label}</TableCell>
+                          {allRoles.map((role) => (
+                            <TableCell key={role} className="text-center">
+                              {rolePermissions[role][perm.key] ? (
+                                <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" />
+                              ) : (
+                                <XCircle className="h-5 w-5 text-muted-foreground/30 mx-auto" />
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      </>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -532,23 +531,34 @@ export default function RolesManagementPage() {
               <AlertTriangle className="h-5 w-5 text-amber-500" />
               تأكيد تغيير الصلاحية
             </DialogTitle>
-            <DialogDescription className="pt-4 space-y-3">
-              <p>هل أنت متأكد من تغيير صلاحية المستخدم:</p>
-              <p className="font-bold text-foreground">{confirmDialog?.userName}</p>
-              <div className="flex items-center gap-2 justify-center py-2">
-                {confirmDialog && (
-                  <>
-                    {getRoleBadge(confirmDialog.oldRole)}
-                    <span className="text-muted-foreground">←</span>
-                    {getRoleBadge(confirmDialog.newRole)}
-                  </>
-                )}
-              </div>
-              <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
-                سيتم تسجيل هذا التغيير في سجل النشاط
-              </p>
+            <DialogDescription>
+              هل أنت متأكد من تغيير صلاحية "{confirmDialog?.userName}"؟
             </DialogDescription>
           </DialogHeader>
+          
+          <div className="py-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">الدور الحالي:</span>
+              {confirmDialog && getRoleBadge(confirmDialog.oldRole)}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">الدور الجديد:</span>
+              {confirmDialog && getRoleBadge(confirmDialog.newRole)}
+            </div>
+            
+            {confirmDialog?.newRole && (
+              <div className="mt-4 p-3 bg-muted/50 rounded-lg text-sm">
+                <p className="font-medium mb-1">ملاحظة:</p>
+                <p className="text-muted-foreground">
+                  {rolesInfo[confirmDialog.newRole].description}
+                </p>
+                <p className="mt-2 text-muted-foreground">
+                  سيتم توجيه المستخدم إلى: <code className="bg-background px-1 rounded">{rolesInfo[confirmDialog.newRole].dashboardPath}</code>
+                </p>
+              </div>
+            )}
+          </div>
+
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setConfirmDialog(null)}>
               إلغاء

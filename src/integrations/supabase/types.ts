@@ -1693,7 +1693,7 @@ export type Database = {
     }
     Enums: {
       agent_status: "available" | "busy" | "offline"
-      app_role: "admin" | "editor" | "viewer" | "support_agent"
+      app_role: "admin" | "editor" | "support_agent" | "client"
       article_status: "draft" | "published" | "archived"
       auto_assign_mode: "disabled" | "round_robin" | "least_active" | "by_team"
       conversation_status: "unassigned" | "assigned" | "closed"
@@ -1844,7 +1844,7 @@ export const Constants = {
   public: {
     Enums: {
       agent_status: ["available", "busy", "offline"],
-      app_role: ["admin", "editor", "viewer", "support_agent"],
+      app_role: ["admin", "editor", "support_agent", "client"],
       article_status: ["draft", "published", "archived"],
       auto_assign_mode: ["disabled", "round_robin", "least_active", "by_team"],
       conversation_status: ["unassigned", "assigned", "closed"],
