@@ -1,15 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Search, Menu, X, LogOut, User, Building2, Users, Shield, Headphones } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
-import { useStaffAuth } from "@/hooks/useStaffAuth";
+import { useUserType } from "@/hooks/useUserType";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { NotificationDropdown } from "@/components/layout/NotificationDropdown";
 import { ChatNotificationDropdown } from "@/components/layout/ChatNotificationDropdown";
 import webyanLogo from "@/assets/webyan-logo.svg";
-import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface HeaderProps {
@@ -17,101 +15,24 @@ interface HeaderProps {
   isMenuOpen?: boolean;
 }
 
-type UserType = 'admin' | 'editor' | 'staff' | 'support_agent' | 'client' | 'visitor' | null;
-
 export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
   const location = useLocation();
-  const isDashboardOnly = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff') || location.pathname.startsWith('/portal');
+  const isDashboardOnly = location.pathname.startsWith('/admin') || 
+                          location.pathname.startsWith('/staff') || 
+                          location.pathname.startsWith('/support') ||
+                          location.pathname.startsWith('/portal');
 
   const [searchQuery, setSearchQuery] = useState("");
-  const { user, role, loading: authLoading, signOut, isAdmin, isAdminOrEditor, isSupportAgent } = useAuth();
-  const { isStaff, permissions, loading: staffLoading } = useStaffAuth();
-  
-  const [isClient, setIsClient] = useState(false);
-  const [clientOrganizationId, setClientOrganizationId] = useState<string | null>(null);
-  const [userType, setUserType] = useState<UserType>(null);
-  const [userName, setUserName] = useState<string | null>(null);
-  const [clientLoading, setClientLoading] = useState(false);
-
-  // Combined loading state
-  const isLoading = authLoading || staffLoading || clientLoading;
-
-  useEffect(() => {
-    if (!authLoading && !staffLoading && user) {
-      checkUserType();
-    } else if (!user && !authLoading) {
-      setUserType(null);
-      setIsClient(false);
-      setClientOrganizationId(null);
-      setUserName(null);
-    }
-  }, [user, authLoading, staffLoading, isAdmin, isAdminOrEditor, isStaff, isSupportAgent]);
-
-  const checkUserType = async () => {
-    // Priority: Admin > Editor > Support Agent > Staff > Client > Visitor
-    
-    // Check if admin first
-    if (isAdmin) {
-      setUserType('admin');
-      setUserName(user?.email?.split('@')[0] || null);
-      return;
-    }
-
-    // Check if editor
-    if (isAdminOrEditor && !isAdmin) {
-      setUserType('editor');
-      setUserName(user?.email?.split('@')[0] || null);
-      return;
-    }
-
-    // Check if support agent (new role)
-    if (isSupportAgent) {
-      setUserType('support_agent');
-      setUserName(user?.email?.split('@')[0] || null);
-      return;
-    }
-
-    // Check if staff
-    if (isStaff && permissions.staffId) {
-      setUserType('staff');
-      // Get staff name
-      const { data: staffData } = await supabase
-        .from('staff_members')
-        .select('full_name')
-        .eq('id', permissions.staffId)
-        .single();
-      
-      if (staffData) {
-        setUserName(staffData.full_name);
-      }
-      return;
-    }
-
-    // Check if client
-    setClientLoading(true);
-    try {
-      const { data: clientData } = await supabase
-        .from('client_accounts')
-        .select('id, organization_id, full_name')
-        .eq('user_id', user?.id)
-        .eq('is_active', true)
-        .maybeSingle();
-      
-      if (clientData) {
-        setIsClient(true);
-        setClientOrganizationId(clientData.organization_id);
-        setUserType('client');
-        setUserName(clientData.full_name);
-        return;
-      }
-    } finally {
-      setClientLoading(false);
-    }
-
-    // Default: visitor
-    setUserType('visitor');
-    setUserName(user?.email?.split('@')[0] || null);
-  };
+  const { 
+    user, 
+    loading, 
+    signOut, 
+    userInfo, 
+    isAdmin, 
+    isAdminOrEditor, 
+    isStaff, 
+    isClient 
+  } = useUserType();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,15 +42,13 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
   };
 
   const getUserTypeLabel = () => {
-    switch (userType) {
+    switch (userInfo.userType) {
       case 'admin':
         return 'مدير النظام';
       case 'editor':
         return 'محرر';
-      case 'support_agent':
-        return 'موظف دعم فني';
       case 'staff':
-        return 'موظف';
+        return userInfo.roleName === 'support_agent' ? 'موظف دعم فني' : 'موظف';
       case 'client':
         return 'عميل';
       default:
@@ -138,13 +57,11 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
   };
 
   const getUserTypeBadgeColor = () => {
-    switch (userType) {
+    switch (userInfo.userType) {
       case 'admin':
         return 'bg-red-100 text-red-700 border-red-200';
       case 'editor':
         return 'bg-purple-100 text-purple-700 border-purple-200';
-      case 'support_agent':
-        return 'bg-orange-100 text-orange-700 border-orange-200';
       case 'staff':
         return 'bg-blue-100 text-blue-700 border-blue-200';
       case 'client':
@@ -155,15 +72,13 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
   };
 
   const getUserTypeIcon = () => {
-    switch (userType) {
+    switch (userInfo.userType) {
       case 'admin':
         return <Shield className="h-3 w-3" />;
       case 'editor':
         return <User className="h-3 w-3" />;
-      case 'support_agent':
-        return <Headphones className="h-3 w-3" />;
       case 'staff':
-        return <Users className="h-3 w-3" />;
+        return <Headphones className="h-3 w-3" />;
       case 'client':
         return <Building2 className="h-3 w-3" />;
       default:
@@ -173,13 +88,12 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
 
   // Get appropriate portal link based on user type
   const getPortalLink = () => {
-    switch (userType) {
+    switch (userInfo.userType) {
       case 'admin':
       case 'editor':
         return { href: '/admin', label: 'لوحة التحكم', icon: Shield, color: 'text-red-600 hover:text-red-700 hover:bg-red-50' };
-      case 'support_agent':
       case 'staff':
-        return { href: '/staff', label: 'بوابة الموظفين', icon: Users, color: 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' };
+        return { href: '/support', label: 'بوابة الدعم', icon: Headphones, color: 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' };
       case 'client':
         return { href: '/portal', label: 'بوابة العملاء', icon: Building2, color: 'text-green-600 hover:text-green-700 hover:bg-green-50' };
       default:
@@ -235,7 +149,7 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
             <Link to="/submit-ticket">إبلاغ عن مشكلة</Link>
           </Button>
           
-          {isLoading ? (
+          {loading ? (
             <div className="flex items-center gap-2 mr-2 pr-2 border-r border-border">
               <Skeleton className="h-8 w-8 rounded-full" />
               <div className="flex flex-col gap-1">
@@ -250,32 +164,32 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
                   <NotificationDropdown />
 
                   {/* Chat Notifications based on user type */}
-                  {(userType === 'admin' || userType === 'editor') && (
+                  {(isAdmin || isAdminOrEditor) && (
                     <ChatNotificationDropdown 
                       userType="admin" 
                       linkTo="/admin/chat"
                     />
                   )}
 
-                  {(userType === 'staff' || userType === 'support_agent') && permissions.staffId && (
+                  {isStaff && userInfo.staffId && (
                     <ChatNotificationDropdown 
                       userType="staff" 
-                      staffId={permissions.staffId}
-                      linkTo="/staff/chat"
+                      staffId={userInfo.staffId}
+                      linkTo="/support/chat"
                     />
                   )}
 
-                  {userType === 'client' && clientOrganizationId && (
+                  {isClient && userInfo.organizationId && (
                     <ChatNotificationDropdown 
                       userType="client" 
-                      organizationId={clientOrganizationId}
+                      organizationId={userInfo.organizationId}
                       linkTo="/portal/chat"
                     />
                   )}
                 </>
               )}
               
-              {/* Portal Link based on user type - Show only the appropriate portal */}
+              {/* Portal Link based on user type */}
               {portalLink && (
                 <Button variant="ghost" size="sm" asChild className={portalLink.color}>
                   <Link to={portalLink.href} className="flex items-center gap-1">
@@ -289,7 +203,7 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
               <div className="flex items-center gap-2 mr-2 pr-2 border-r border-border">
                 <div className="flex flex-col items-end">
                   <span className="text-sm font-medium text-foreground">
-                    {userName || user?.email?.split('@')[0]}
+                    {userInfo.displayName || user?.email?.split('@')[0]}
                   </span>
                   <Badge variant="outline" className={`text-xs px-1.5 py-0 flex items-center gap-1 ${getUserTypeBadgeColor()}`}>
                     {getUserTypeIcon()}
@@ -309,18 +223,26 @@ export function Header({ onMenuToggle, isMenuOpen }: HeaderProps) {
             </>
           ) : (
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" asChild>
-                <Link to="/portal-login" className="flex items-center gap-1">
+              <Button variant="default" size="sm" asChild className="bg-green-600 hover:bg-green-700">
+                <Link to="/portal/login" className="flex items-center gap-1">
                   <Building2 className="h-4 w-4" />
                   بوابة العملاء
                 </Link>
               </Button>
-              <Button variant="default" size="sm" asChild>
-                <Link to="/auth">تسجيل الدخول</Link>
-              </Button>
             </div>
           )}
         </nav>
+
+        {/* Mobile: Login Button */}
+        <div className="md:hidden">
+          {!loading && !user && (
+            <Button size="sm" asChild className="bg-green-600 hover:bg-green-700">
+              <Link to="/portal/login">
+                <Building2 className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
     </header>
   );

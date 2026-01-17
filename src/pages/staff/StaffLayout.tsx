@@ -51,7 +51,7 @@ export default function StaffLayout() {
     // Only redirect when loading is complete
     if (!loading) {
       if (!user) {
-        navigate('/auth');
+        navigate('/support/login');
       } else if (!isStaff) {
         // User is logged in but not staff - redirect to home
         navigate('/');
@@ -78,7 +78,7 @@ export default function StaffLayout() {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/auth');
+    navigate('/support/login');
   };
 
   // Show loading while auth is being checked
@@ -99,11 +99,11 @@ export default function StaffLayout() {
   }
 
   const navItems: NavItem[] = [
-    { title: 'لوحة التحكم', href: '/staff', icon: LayoutDashboard },
-    { title: 'التذاكر الموجهة', href: '/staff/tickets', icon: Ticket, permission: 'canReplyTickets' },
-    { title: 'المحادثات', href: '/staff/chat', icon: MessageCircle, permission: 'canReplyTickets' },
-    { title: 'الاجتماعات الموجهة', href: '/staff/meetings', icon: Calendar, permission: 'canAttendMeetings' },
-    { title: 'إدارة المحتوى', href: '/staff/content', icon: FileText, permission: 'canManageContent' },
+    { title: 'لوحة التحكم', href: '/support', icon: LayoutDashboard },
+    { title: 'التذاكر الموجهة', href: '/support/tickets', icon: Ticket, permission: 'canReplyTickets' },
+    { title: 'المحادثات', href: '/support/chat', icon: MessageCircle, permission: 'canReplyTickets' },
+    { title: 'الاجتماعات الموجهة', href: '/support/meetings', icon: Calendar, permission: 'canAttendMeetings' },
+    { title: 'إدارة المحتوى', href: '/support/content', icon: FileText, permission: 'canManageContent' },
   ];
 
   const filteredNavItems = navItems.filter(item => {
@@ -125,7 +125,7 @@ export default function StaffLayout() {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <Link to="/staff" className="flex items-center gap-2">
+            <Link to="/support" className="flex items-center gap-2">
               <img src={webyanLogo} alt="ويبيان" className="h-8 w-auto" />
               <span className="font-bold text-lg hidden sm:inline">لوحة الموظف</span>
             </Link>
@@ -134,7 +134,7 @@ export default function StaffLayout() {
           <div className="flex items-center gap-4">
             {/* Chat notifications (داخل لوحة الموظف) */}
             {permissions.staffId && (
-              <ChatNotificationDropdown userType="staff" staffId={permissions.staffId} linkTo="/staff/chat" />
+              <ChatNotificationDropdown userType="staff" staffId={permissions.staffId} linkTo="/support/chat" />
             )}
 
             <Link to="/">

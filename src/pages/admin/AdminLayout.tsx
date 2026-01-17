@@ -168,7 +168,7 @@ export default function AdminLayout() {
     // Only redirect when loading is complete
     if (!loading) {
       if (!user) {
-        navigate('/auth');
+        navigate('/admin/login');
       } else if (!isAdminOrEditor) {
         // User is logged in but not admin/editor - redirect to appropriate portal
         navigate('/');
@@ -178,7 +178,7 @@ export default function AdminLayout() {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/auth');
+    navigate('/admin/login');
   };
 
   // Show loading while auth is being checked

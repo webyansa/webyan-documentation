@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { StaffAuthProvider } from "@/hooks/useStaffAuth";
 
@@ -14,17 +14,17 @@ import SearchPage from "./pages/SearchPage";
 import ChangelogPage from "./pages/ChangelogPage";
 import ReportIssuePage from "./pages/ReportIssuePage";
 import GettingStartedPage from "./pages/GettingStartedPage";
-import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import SubmitTicketPage from "./pages/SubmitTicketPage";
 import MyTicketsPage from "./pages/MyTicketsPage";
 import TicketDetailPage from "./pages/TicketDetailPage";
 import TrackTicketPage from "./pages/TrackTicketPage";
-import PortalLoginPage from "./pages/PortalLoginPage";
 import EmbedTicketPage from "./pages/embed/EmbedTicketPage";
+import EmbedChatPage from "./pages/embed/EmbedChatPage";
 
 // Admin pages
 import AdminLayout from "./pages/admin/AdminLayout";
+import AdminLoginPage from "./pages/admin/AdminLoginPage";
 import DashboardPage from "./pages/admin/DashboardPage";
 import ArticlesPage from "./pages/admin/ArticlesPage";
 import ArticleEditorPage from "./pages/admin/ArticleEditorPage";
@@ -53,10 +53,10 @@ import ChatEmbedSettingsPage from "./pages/admin/ChatEmbedSettingsPage";
 import ArchivedChatsPage from "./pages/admin/ArchivedChatsPage";
 import RolesManagementPage from "./pages/admin/RolesManagementPage";
 import ActivityLogPage from "./pages/admin/ActivityLogPage";
-import EmbedChatPage from "./pages/embed/EmbedChatPage";
 
 // Client Portal pages
 import PortalLayout from "./pages/portal/PortalLayout";
+import PortalLoginPage from "./pages/portal/PortalLoginPage";
 import PortalDashboard from "./pages/portal/PortalDashboard";
 import PortalTickets from "./pages/portal/PortalTickets";
 import PortalNewTicket from "./pages/portal/PortalNewTicket";
@@ -68,8 +68,9 @@ import PortalMessages from "./pages/portal/PortalMessages";
 import PortalChat from "./pages/portal/PortalChat";
 import PortalSettings from "./pages/portal/PortalSettings";
 
-// Staff Portal pages
+// Support/Staff Portal pages
 import StaffLayout from "./pages/staff/StaffLayout";
+import SupportLoginPage from "./pages/staff/SupportLoginPage";
 import StaffDashboard from "./pages/staff/StaffDashboard";
 import StaffTickets from "./pages/staff/StaffTickets";
 import StaffMeetings from "./pages/staff/StaffMeetings";
@@ -89,7 +90,6 @@ const App = () => (
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<HomePage />} />
-              <Route path="/auth" element={<AuthPage />} />
               <Route path="/getting-started" element={<GettingStartedPage />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/changelog" element={<ChangelogPage />} />
@@ -98,14 +98,20 @@ const App = () => (
               <Route path="/my-tickets" element={<MyTicketsPage />} />
               <Route path="/my-tickets/:ticketId" element={<TicketDetailPage />} />
               <Route path="/track-ticket" element={<TrackTicketPage />} />
-              <Route path="/portal-login" element={<PortalLoginPage />} />
               <Route path="/embed/ticket" element={<EmbedTicketPage />} />
               <Route path="/embed/chat" element={<EmbedChatPage />} />
               <Route path="/docs/:moduleSlug" element={<ModulePage />} />
               <Route path="/docs/:moduleSlug/:subModuleSlug" element={<ModulePage />} />
               <Route path="/docs/:moduleSlug/:subModuleSlug/:articleSlug" element={<ArticlePage />} />
               
+              {/* Legacy routes - redirect to new paths */}
+              <Route path="/auth" element={<Navigate to="/admin/login" replace />} />
+              <Route path="/portal-login" element={<Navigate to="/portal/login" replace />} />
+              <Route path="/staff" element={<Navigate to="/support" replace />} />
+              <Route path="/staff/*" element={<Navigate to="/support" replace />} />
+              
               {/* Client Portal Routes */}
+              <Route path="/portal/login" element={<PortalLoginPage />} />
               <Route path="/portal" element={<PortalLayout />}>
                 <Route index element={<PortalDashboard />} />
                 <Route path="tickets" element={<PortalTickets />} />
@@ -119,8 +125,9 @@ const App = () => (
                 <Route path="settings" element={<PortalSettings />} />
               </Route>
 
-              {/* Staff Portal Routes */}
-              <Route path="/staff" element={<StaffLayout />}>
+              {/* Support/Staff Portal Routes */}
+              <Route path="/support/login" element={<SupportLoginPage />} />
+              <Route path="/support" element={<StaffLayout />}>
                 <Route index element={<StaffDashboard />} />
                 <Route path="tickets" element={<StaffTickets />} />
                 <Route path="tickets/:id" element={<StaffTickets />} />
@@ -131,6 +138,7 @@ const App = () => (
               </Route>
               
               {/* Admin Routes */}
+              <Route path="/admin/login" element={<AdminLoginPage />} />
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<DashboardPage />} />
                 <Route path="articles" element={<ArticlesPage />} />

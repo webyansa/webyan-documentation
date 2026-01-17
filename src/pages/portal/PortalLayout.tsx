@@ -100,13 +100,13 @@ const PortalLayout = () => {
           organization: org
         });
       } else {
-        // User is not a client, redirect to home
+        // User is not a client, redirect to portal login
         toast.error('ليس لديك صلاحية الوصول لبوابة العملاء');
-        navigate('/');
+        navigate('/portal/login');
       }
     } catch (error) {
       console.error('Error fetching client info:', error);
-      navigate('/');
+      navigate('/portal/login');
     } finally {
       setLoading(false);
     }
