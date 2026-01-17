@@ -261,6 +261,12 @@ export default function PortalLoginPage() {
           </CardContent>
 
           <CardFooter className="flex flex-col gap-3 text-center pt-4 border-t">
+            <Link 
+              to="/portal/forgot-password" 
+              className="text-sm text-muted-foreground hover:text-primary transition-colors"
+            >
+              نسيت كلمة المرور؟
+            </Link>
             <p className="text-sm text-muted-foreground">
               لست عميلاً؟{' '}
               <Link to="/submit-ticket" className="text-primary hover:underline">

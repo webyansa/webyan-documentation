@@ -57,6 +57,8 @@ import ActivityLogPage from "./pages/admin/ActivityLogPage";
 // Client Portal pages
 import PortalLayout from "./pages/portal/PortalLayout";
 import PortalLoginPage from "./pages/portal/PortalLoginPage";
+import PortalForgotPasswordPage from "./pages/portal/PortalForgotPasswordPage";
+import PortalResetPasswordPage from "./pages/portal/PortalResetPasswordPage";
 import PortalDashboard from "./pages/portal/PortalDashboard";
 import PortalTickets from "./pages/portal/PortalTickets";
 import PortalNewTicket from "./pages/portal/PortalNewTicket";
@@ -110,8 +112,12 @@ const App = () => (
               <Route path="/staff" element={<Navigate to="/support" replace />} />
               <Route path="/staff/*" element={<Navigate to="/support" replace />} />
               
-              {/* Client Portal Routes */}
+              {/* Client Portal Routes - Public */}
               <Route path="/portal/login" element={<PortalLoginPage />} />
+              <Route path="/portal/forgot-password" element={<PortalForgotPasswordPage />} />
+              <Route path="/portal/reset-password" element={<PortalResetPasswordPage />} />
+              
+              {/* Client Portal Routes - Protected */}
               <Route path="/portal" element={<PortalLayout />}>
                 <Route index element={<PortalDashboard />} />
                 <Route path="tickets" element={<PortalTickets />} />
