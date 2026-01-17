@@ -185,13 +185,25 @@ const PortalLoginPage = () => {
               </div>
             </div>
 
-            <div className="mt-6 text-center">
-              <Link 
-                to="/submit-ticket"
-                className="text-sm text-primary hover:underline"
-              >
-                لست عميلاً؟ تواصل معنا
-              </Link>
+            <div className="mt-6 pt-4 border-t text-center space-y-2">
+              <p className="text-sm text-muted-foreground">
+                لست عميلاً؟{' '}
+                <Link 
+                  to="/submit-ticket"
+                  className="text-primary hover:underline"
+                >
+                  تواصل معنا
+                </Link>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                موظف أو إداري؟{' '}
+                <Link 
+                  to="/auth"
+                  className="text-primary hover:underline"
+                >
+                  سجل دخولك من هنا
+                </Link>
+              </p>
             </div>
           </CardContent>
         </Card>

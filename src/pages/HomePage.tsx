@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Rocket, TrendingUp, Clock, ArrowLeft, Loader2, Building2, Ticket } from "lucide-react";
+import { BookOpen, Rocket, TrendingUp, Clock, ArrowLeft, Loader2, Building2, Ticket, Users, Shield } from "lucide-react";
 import { DocsLayout } from "@/components/layout/DocsLayout";
 import { SearchBar } from "@/components/docs/SearchBar";
 import { ModuleCard } from "@/components/docs/ModuleCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useStaffAuth } from "@/hooks/useStaffAuth";
 import webyanLogo from "@/assets/webyan-logo.svg";
 
 interface Module {
@@ -29,21 +30,37 @@ interface PopularArticle {
   subModuleSlug: string;
 }
 
+type UserType = 'admin' | 'staff' | 'client' | null;
+
 export default function HomePage() {
-  const { user } = useAuth();
+  const { user, isAdmin, isAdminOrEditor } = useAuth();
+  const { isStaff } = useStaffAuth();
   const [modules, setModules] = useState<Module[]>([]);
   const [popularArticles, setPopularArticles] = useState<PopularArticle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isClient, setIsClient] = useState(false);
+  const [userType, setUserType] = useState<UserType>(null);
 
   useEffect(() => {
     fetchData();
     if (user) {
-      checkIfClient();
+      checkUserType();
+    } else {
+      setUserType(null);
     }
-  }, [user]);
+  }, [user, isAdmin, isAdminOrEditor, isStaff]);
 
-  const checkIfClient = async () => {
+  const checkUserType = async () => {
+    // Priority: Admin > Staff > Client
+    if (isAdmin || isAdminOrEditor) {
+      setUserType('admin');
+      return;
+    }
+
+    if (isStaff) {
+      setUserType('staff');
+      return;
+    }
+
     const { data } = await supabase
       .from('client_accounts')
       .select('id')
@@ -51,7 +68,9 @@ export default function HomePage() {
       .eq('is_active', true)
       .maybeSingle();
     
-    setIsClient(!!data);
+    if (data) {
+      setUserType('client');
+    }
   };
 
   const fetchData = async () => {
@@ -133,6 +152,96 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Get portal card based on user type
+  const getPortalCard = () => {
+    if (userType === 'admin') {
+      return (
+        <Link
+          to="/admin"
+          className="docs-card flex items-center gap-4 p-6 group border-red-200 bg-red-50/50"
+        >
+          <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-red-100 text-red-600 group-hover:scale-110 transition-transform">
+            <Shield className="h-7 w-7" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold group-hover:text-red-600 transition-colors">
+              لوحة التحكم
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              إدارة النظام
+            </p>
+          </div>
+          <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-red-600 group-hover:-translate-x-1 transition-all" />
+        </Link>
+      );
+    }
+
+    if (userType === 'staff') {
+      return (
+        <Link
+          to="/staff"
+          className="docs-card flex items-center gap-4 p-6 group border-blue-200 bg-blue-50/50"
+        >
+          <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-100 text-blue-600 group-hover:scale-110 transition-transform">
+            <Users className="h-7 w-7" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold group-hover:text-blue-600 transition-colors">
+              بوابة الموظفين
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              مهامي ودعم العملاء
+            </p>
+          </div>
+          <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-blue-600 group-hover:-translate-x-1 transition-all" />
+        </Link>
+      );
+    }
+
+    if (userType === 'client') {
+      return (
+        <Link
+          to="/portal"
+          className="docs-card flex items-center gap-4 p-6 group border-green-200 bg-green-50/50"
+        >
+          <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-green-100 text-green-600 group-hover:scale-110 transition-transform">
+            <Building2 className="h-7 w-7" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold group-hover:text-green-600 transition-colors">
+              بوابة العملاء
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              إدارة حسابك
+            </p>
+          </div>
+          <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-green-600 group-hover:-translate-x-1 transition-all" />
+        </Link>
+      );
+    }
+
+    // Not logged in - show client portal login
+    return (
+      <Link
+        to="/portal-login"
+        className="docs-card flex items-center gap-4 p-6 group border-primary/20"
+      >
+        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary group-hover:scale-110 transition-transform">
+          <Building2 className="h-7 w-7" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-lg font-semibold group-hover:text-primary transition-colors">
+            بوابة العملاء
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            دخول عملاء ويبيان
+          </p>
+        </div>
+        <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all" />
+      </Link>
+    );
   };
 
   return (
@@ -224,43 +333,7 @@ export default function HomePage() {
             <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all" />
           </Link>
 
-          {isClient ? (
-            <Link
-              to="/portal"
-              className="docs-card flex items-center gap-4 p-6 group border-primary/30 bg-primary/5"
-            >
-              <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/20 text-primary group-hover:scale-110 transition-transform">
-                <Building2 className="h-7 w-7" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold group-hover:text-primary transition-colors">
-                  بوابة العملاء
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  إدارة حسابك
-                </p>
-              </div>
-              <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all" />
-            </Link>
-          ) : (
-            <Link
-              to="/portal-login"
-              className="docs-card flex items-center gap-4 p-6 group border-primary/20"
-            >
-              <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary group-hover:scale-110 transition-transform">
-                <Building2 className="h-7 w-7" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold group-hover:text-primary transition-colors">
-                  بوابة العملاء
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  دخول عملاء ويبيان
-                </p>
-              </div>
-              <ArrowLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:-translate-x-1 transition-all" />
-            </Link>
-          )}
+          {getPortalCard()}
         </div>
       </section>
 

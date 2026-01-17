@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Mail, Lock, User, ArrowRight, BookOpen, Shield, Users } from 'lucide-react';
+import { Loader2, Mail, Lock, User, ArrowRight, BookOpen, Shield, Users, Building2 } from 'lucide-react';
 import { z } from 'zod';
 import webyanLogo from '@/assets/webyan-logo.svg';
 
@@ -21,8 +21,8 @@ type LoginMode = 'select' | 'admin' | 'staff';
 
 export default function AuthPage() {
   const navigate = useNavigate();
-  const { user, loading, signIn, signUp } = useAuth();
-  const { isStaff } = useStaffAuth();
+  const { user, loading, signIn, signUp, isAdmin, isAdminOrEditor } = useAuth();
+  const { isStaff, loading: staffLoading } = useStaffAuth();
   const [loginMode, setLoginMode] = useState<LoginMode>('select');
   const [activeTab, setActiveTab] = useState('login');
   const [email, setEmail] = useState('');
@@ -31,33 +31,45 @@ export default function AuthPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
-    const checkUserRole = async () => {
-      if (user && !loading) {
-        // Check if user is admin
-        const { data: isAdmin } = await supabase.rpc('is_admin', { _user_id: user.id });
+    const checkUserRoleAndRedirect = async () => {
+      if (user && !loading && !staffLoading && !isRedirecting) {
+        setIsRedirecting(true);
         
-        if (isAdmin) {
-          navigate('/admin');
+        // Priority 1: Check if admin
+        if (isAdmin || isAdminOrEditor) {
+          navigate('/admin', { replace: true });
           return;
         }
         
-        // Check if user is staff
-        const { data: staffData } = await supabase.rpc('is_staff', { _user_id: user.id });
-        
-        if (staffData) {
-          navigate('/staff');
+        // Priority 2: Check if staff
+        if (isStaff) {
+          navigate('/staff', { replace: true });
           return;
         }
         
-        // Default redirect
-        navigate('/');
+        // Priority 3: Check if client
+        const { data: clientData } = await supabase
+          .from('client_accounts')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .maybeSingle();
+        
+        if (clientData) {
+          navigate('/portal', { replace: true });
+          return;
+        }
+        
+        // Default: Home page for visitors
+        navigate('/', { replace: true });
       }
     };
     
-    checkUserRole();
-  }, [user, loading, navigate]);
+    checkUserRoleAndRedirect();
+  }, [user, loading, staffLoading, isAdmin, isAdminOrEditor, isStaff, navigate, isRedirecting]);
 
   const validateInputs = (isSignUp: boolean) => {
     try {
@@ -123,10 +135,13 @@ export default function AuthPage() {
     }
   };
 
-  if (loading) {
+  if (loading || staffLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">جاري التحقق من الحساب...</p>
+        </div>
       </div>
     );
   }
@@ -148,7 +163,7 @@ export default function AuthPage() {
 
         {/* Main Content */}
         <main className="flex-1 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md shadow-xl border-border/50">
+          <Card className="w-full max-w-lg shadow-xl border-border/50">
             <CardHeader className="text-center pb-2">
               <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
                 <User className="h-8 w-8 text-primary" />
@@ -163,49 +178,58 @@ export default function AuthPage() {
               {/* Staff Login Option */}
               <button
                 onClick={() => setLoginMode('staff')}
-                className="w-full p-6 rounded-xl border-2 border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 text-right group"
+                className="w-full p-6 rounded-xl border-2 border-border hover:border-blue-300 hover:bg-blue-50/50 transition-all duration-200 text-right group"
               >
                 <div className="flex items-center gap-4">
                   <div className="p-3 rounded-full bg-blue-100 group-hover:bg-blue-200 transition-colors">
                     <Users className="h-6 w-6 text-blue-600" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-lg">دخول الموظفين</h3>
+                    <h3 className="font-bold text-lg">موظفي الدعم الفني</h3>
                     <p className="text-sm text-muted-foreground">
-                      للموظفين المسؤولين عن الدعم الفني والتدريب
+                      للموظفين المسؤولين عن الدعم الفني والمحتوى والاجتماعات
                     </p>
                   </div>
-                  <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-blue-600 transition-colors" />
                 </div>
               </button>
 
               {/* Admin Login Option */}
               <button
                 onClick={() => setLoginMode('admin')}
-                className="w-full p-6 rounded-xl border-2 border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 text-right group"
+                className="w-full p-6 rounded-xl border-2 border-border hover:border-red-300 hover:bg-red-50/50 transition-all duration-200 text-right group"
               >
                 <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-full bg-purple-100 group-hover:bg-purple-200 transition-colors">
-                    <Shield className="h-6 w-6 text-purple-600" />
+                  <div className="p-3 rounded-full bg-red-100 group-hover:bg-red-200 transition-colors">
+                    <Shield className="h-6 w-6 text-red-600" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-bold text-lg">دخول الإدارة</h3>
+                    <h3 className="font-bold text-lg">الإداريين والمحررين</h3>
                     <p className="text-sm text-muted-foreground">
-                      للمسؤولين والمديرين للوصول للوحة التحكم الرئيسية
+                      للمسؤولين والمديرين للوصول إلى لوحة التحكم الرئيسية الكاملة
                     </p>
                   </div>
-                  <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-red-600 transition-colors" />
                 </div>
               </button>
             </CardContent>
 
-            <CardFooter className="flex flex-col gap-2 text-center text-sm text-muted-foreground pt-2">
-              <Link to="/portal-login" className="text-primary hover:underline">
-                هل أنت عميل؟ ادخل لبوابة العملاء
-              </Link>
+            <CardFooter className="flex flex-col gap-3 text-center pt-4 border-t">
+              <p className="text-sm text-muted-foreground">هل أنت عميل؟</p>
+              <Button variant="outline" asChild className="w-full gap-2">
+                <Link to="/portal-login">
+                  <Building2 className="h-4 w-4" />
+                  الدخول لبوابة العملاء
+                </Link>
+              </Button>
             </CardFooter>
           </Card>
         </main>
+
+        {/* Footer */}
+        <footer className="p-4 text-center text-sm text-muted-foreground">
+          © {new Date().getFullYear()} ويبيان. جميع الحقوق محفوظة.
+        </footer>
       </div>
     );
   }
@@ -228,15 +252,17 @@ export default function AuthPage() {
       <main className="flex-1 flex items-center justify-center p-4">
         <Card className="w-full max-w-md shadow-xl border-border/50">
           <CardHeader className="text-center pb-2">
-            <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <div className={`mx-auto mb-4 h-16 w-16 rounded-full flex items-center justify-center ${
+              loginMode === 'staff' ? 'bg-blue-100' : 'bg-red-100'
+            }`}>
               {loginMode === 'staff' ? (
-                <Users className="h-8 w-8 text-primary" />
+                <Users className="h-8 w-8 text-blue-600" />
               ) : (
-                <Shield className="h-8 w-8 text-primary" />
+                <Shield className="h-8 w-8 text-red-600" />
               )}
             </div>
             <CardTitle className="text-2xl font-bold">
-              {loginMode === 'staff' ? 'دخول الموظفين' : 'دخول الإدارة'}
+              {loginMode === 'staff' ? 'دخول موظفي الدعم' : 'دخول الإداريين'}
             </CardTitle>
             <CardDescription>
               {loginMode === 'staff' 
@@ -247,7 +273,11 @@ export default function AuthPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setLoginMode('select')}
+              onClick={() => {
+                setLoginMode('select');
+                setError('');
+                setSuccess('');
+              }}
               className="mt-2 text-muted-foreground"
             >
               ← تغيير نوع الحساب
@@ -309,7 +339,11 @@ export default function AuthPage() {
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  <Button 
+                    type="submit" 
+                    className={`w-full ${loginMode === 'staff' ? 'bg-blue-600 hover:bg-blue-700' : ''}`} 
+                    disabled={isSubmitting}
+                  >
                     {isSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin ml-2" />
                     ) : (
@@ -388,24 +422,30 @@ export default function AuthPage() {
             </CardContent>
           </Tabs>
 
-          <CardFooter className="flex flex-col gap-2 text-center text-sm text-muted-foreground">
+          <CardFooter className="flex flex-col gap-2 text-center text-sm text-muted-foreground border-t pt-4">
             {loginMode === 'staff' ? (
-              <p>
-                حسابات الموظفين يتم إنشاؤها من قبل الإدارة فقط
-              </p>
+              <div className="bg-blue-50 text-blue-700 p-3 rounded-lg text-sm">
+                <Users className="h-4 w-4 inline-block ml-1" />
+                حسابات الموظفين يتم إنشاؤها من قبل الإدارة فقط.
+                <br />
+                تواصل مع المدير للحصول على حساب.
+              </div>
             ) : (
-              <>
-                <p>
-                  المستخدمون الجدد يحصلون على صلاحية "زائر" افتراضياً.
-                </p>
-                <p>
-                  تواصل مع المدير للحصول على صلاحيات أعلى.
-                </p>
-              </>
+              <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-sm">
+                <Shield className="h-4 w-4 inline-block ml-1" />
+                المستخدمون الجدد يحصلون على صلاحية "زائر" افتراضياً.
+                <br />
+                تواصل مع المدير للحصول على صلاحيات إدارية.
+              </div>
             )}
           </CardFooter>
         </Card>
       </main>
+
+      {/* Footer */}
+      <footer className="p-4 text-center text-sm text-muted-foreground">
+        © {new Date().getFullYear()} ويبيان. جميع الحقوق محفوظة.
+      </footer>
     </div>
   );
 }
