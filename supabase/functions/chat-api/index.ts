@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface ChatRequest {
-  action: 'start_conversation' | 'send_message' | 'get_messages' | 'get_conversations' | 'get_conversation' | 'mark_read' | 'assign' | 'close' | 'reopen' | 'convert_to_ticket' | 'archive' | 'restore' | 'delete_permanently' | 'get_archived';
+  action: 'start_conversation' | 'send_message' | 'get_messages' | 'get_conversations' | 'get_conversation' | 'mark_read' | 'assign' | 'close' | 'reopen' | 'convert_to_ticket' | 'archive' | 'restore' | 'delete_permanently' | 'get_archived' | 'toggle_star';
   conversationId?: string;
   message?: string;
   attachments?: string[];
@@ -15,6 +15,7 @@ interface ChatRequest {
   agentId?: string;
   senderName?: string;
   senderEmail?: string;
+  isStarred?: boolean;
   ticketData?: {
     subject: string;
     category: string;
@@ -959,6 +960,35 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ conversations: archivedConvs || [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'toggle_star': {
+        if (!canAgentAct) {
+          return new Response(
+            JSON.stringify({ error: 'Staff access required' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (!body.conversationId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await supabase
+          .from('conversations')
+          .update({ 
+            is_starred: body.isStarred,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', body.conversationId);
+
+        return new Response(
+          JSON.stringify({ success: true }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

@@ -21,7 +21,7 @@ import {
   UserPlus, X, RotateCcw, Ticket, Circle, Search, Users, Inbox,
   Phone, Mail, ExternalLink, Loader2, Plus, ChevronLeft, Tag,
   MoreHorizontal, ArrowUpRight, StickyNote, AlertTriangle, Clock,
-  Paperclip, Smile, Volume2, VolumeX, Image as ImageIcon, Trash2, Archive, RefreshCw, Info
+  Paperclip, Smile, Volume2, VolumeX, Image as ImageIcon, Trash2, Archive, RefreshCw, Info, Star
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -109,7 +109,8 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
     setCurrentConversation,
     archiveConversation,
     restoreConversation,
-    deleteConversation
+    deleteConversation,
+    toggleStarConversation
   } = useChat({ autoFetch: true });
 
   const { currentStatus, staffId, updateStatus, availableAgents } = useAgentStatus();
@@ -144,6 +145,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
   const [selectedClient, setSelectedClient] = useState<GroupedClient | null>(null);
   const [archivedConversations, setArchivedConversations] = useState<Conversation[]>([]);
   const [loadingArchived, setLoadingArchived] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -663,34 +665,48 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                       <Avatar className="h-10 w-10">
                         {conv.organization?.logo_url && <AvatarImage src={conv.organization.logo_url} />}
                         <AvatarFallback className="bg-muted text-muted-foreground text-sm">
-                          {conv.organization?.name?.charAt(0) || <Building2 className="h-4 w-4" />}
+                          {conv.organization?.name?.charAt(0) || (conv.metadata as any)?.sender_name?.charAt(0) || <Building2 className="h-4 w-4" />}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {conv.organization?.name || (conv.metadata as any)?.sender_name || 'زائر'}
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm truncate">
+                            {conv.organization?.name || (conv.metadata as any)?.sender_name || 'زائر'}
+                          </p>
+                          {(conv as any).is_starred && (
+                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {(conv.metadata as any)?.sender_email || conv.organization?.contact_email || 'بدون بريد'}
                         </p>
-                        <p className="text-xs text-muted-foreground truncate">{conv.last_message_preview}</p>
+                        <p className="text-xs text-muted-foreground/70 truncate mt-0.5">{conv.last_message_preview}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          حُذفت: {conv.archived_at && formatDistanceToNow(new Date(conv.archived_at), { addSuffix: true, locale: ar })}
+                        </p>
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex flex-col gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8"
-                          onClick={() => { restoreConversation(conv.id); fetchArchivedConversations(); }}
+                          className="h-7 w-7 text-green-600 hover:text-green-700"
+                          onClick={async () => { 
+                            await restoreConversation(conv.id); 
+                            fetchArchivedConversations(); 
+                          }}
                           title="استعادة"
                         >
-                          <RefreshCw className="h-4 w-4" />
+                          <RefreshCw className="h-3.5 w-3.5" />
                         </Button>
                         {isAdmin && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => { deleteConversation(conv.id); fetchArchivedConversations(); }}
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={() => setDeleteConfirmId(conv.id)}
                             title="حذف نهائي"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         )}
                       </div>
@@ -896,12 +912,17 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 mb-0.5">
-                        <span className="font-medium text-sm truncate">
-                          {conv.source === 'internal'
-                            ? (conv.metadata as any)?.sender_name || 'موظف'
-                            : conv.organization?.name || (conv.metadata as any)?.sender_name || 'زائر'
-                          }
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-sm truncate">
+                            {conv.source === 'internal'
+                              ? (conv.metadata as any)?.sender_name || 'موظف'
+                              : conv.organization?.name || (conv.metadata as any)?.sender_name || 'زائر'
+                            }
+                          </span>
+                          {(conv as any).is_starred && (
+                            <Star className="h-3 w-3 fill-amber-400 text-amber-400 flex-shrink-0" />
+                          )}
+                        </div>
                         <span className="text-[10px] text-muted-foreground flex-shrink-0">
                           {conv.last_message_at && formatDistanceToNow(new Date(conv.last_message_at), { 
                             addSuffix: false, 
@@ -986,6 +1007,20 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
               </div>
               
               <div className="flex items-center gap-1">
+                {/* Star button - always visible */}
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8"
+                  onClick={() => toggleStarConversation(currentConversation.id, (currentConversation as any).is_starred || false)}
+                  title={(currentConversation as any).is_starred ? 'إزالة التمييز' : 'تمييز كمهم'}
+                >
+                  <Star className={cn(
+                    "h-4 w-4",
+                    (currentConversation as any).is_starred ? "fill-amber-400 text-amber-400" : "text-muted-foreground"
+                  )} />
+                </Button>
+
                 {currentConversation.status === 'unassigned' && (
                   <Button size="sm" onClick={handleClaimConversation} className="h-8 text-xs gap-1.5">
                     <UserPlus className="h-3.5 w-3.5" />
@@ -1041,7 +1076,10 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8 text-amber-500 hover:text-amber-600"
-                      onClick={() => archiveConversation(currentConversation.id)}
+                      onClick={async () => {
+                        await archiveConversation(currentConversation.id);
+                        setCurrentConversation(null);
+                      }}
                       title="نقل إلى المهملات"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1074,7 +1112,10 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8 text-amber-500 hover:text-amber-600"
-                      onClick={() => archiveConversation(currentConversation.id)}
+                      onClick={async () => {
+                        await archiveConversation(currentConversation.id);
+                        setCurrentConversation(null);
+                      }}
                       title="نقل إلى المهملات"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1552,6 +1593,43 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowNoteDialog(false)}>إلغاء</Button>
             <Button onClick={handleAddInternalNote} disabled={!internalNote.trim()}>إضافة</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              تأكيد الحذف النهائي
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">
+              هل أنت متأكد من حذف هذه المحادثة نهائياً؟ لا يمكن استرجاع المحادثة بعد الحذف.
+            </p>
+            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+              <p className="text-sm text-destructive font-medium">
+                ⚠️ سيتم حذف جميع الرسائل والمرفقات المرتبطة بهذه المحادثة.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
+            <Button 
+              variant="destructive" 
+              onClick={async () => {
+                if (deleteConfirmId) {
+                  await deleteConversation(deleteConfirmId);
+                  fetchArchivedConversations();
+                  setDeleteConfirmId(null);
+                }
+              }}
+            >
+              حذف نهائياً
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

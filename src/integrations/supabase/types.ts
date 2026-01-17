@@ -266,6 +266,7 @@ export type Database = {
           created_at: string
           embed_token_id: string | null
           id: string
+          is_starred: boolean | null
           last_message_at: string | null
           last_message_preview: string | null
           metadata: Json | null
@@ -285,6 +286,7 @@ export type Database = {
           created_at?: string
           embed_token_id?: string | null
           id?: string
+          is_starred?: boolean | null
           last_message_at?: string | null
           last_message_preview?: string | null
           metadata?: Json | null
@@ -304,6 +306,7 @@ export type Database = {
           created_at?: string
           embed_token_id?: string | null
           id?: string
+          is_starred?: boolean | null
           last_message_at?: string | null
           last_message_preview?: string | null
           metadata?: Json | null

@@ -18,6 +18,8 @@ export interface Conversation {
   last_message_preview: string | null;
   created_at: string;
   closed_at: string | null;
+  archived_at: string | null;
+  is_starred: boolean;
   organization?: {
     id: string;
     name: string;
@@ -264,11 +266,31 @@ export function useChat(options: UseChatOptions = {}) {
         description: 'تم حذف المحادثة نهائياً'
       });
       await fetchConversations();
+      setCurrentConversation(null);
+      setMessages([]);
     } catch (error) {
       console.error('Error deleting conversation:', error);
       toast({
         title: 'خطأ',
         description: 'فشل في حذف المحادثة',
+        variant: 'destructive'
+      });
+    }
+  }, [callChatAPI, fetchConversations, toast]);
+
+  const toggleStarConversation = useCallback(async (conversationId: string, isStarred: boolean) => {
+    try {
+      await callChatAPI('toggle_star', { conversationId, isStarred: !isStarred });
+      toast({
+        title: 'تم',
+        description: isStarred ? 'تم إزالة التمييز' : 'تم تمييز المحادثة'
+      });
+      await fetchConversations();
+    } catch (error) {
+      console.error('Error toggling star:', error);
+      toast({
+        title: 'خطأ',
+        description: 'فشل في تعديل حالة المحادثة',
         variant: 'destructive'
       });
     }
@@ -416,6 +438,7 @@ export function useChat(options: UseChatOptions = {}) {
     setCurrentConversation,
     archiveConversation,
     restoreConversation,
-    deleteConversation
+    deleteConversation,
+    toggleStarConversation
   };
 }
