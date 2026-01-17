@@ -217,8 +217,8 @@ export default function EmbedChatWidget({
     userType: 'embed'
   });
 
-  // Check if client data is prefilled
-  const hasPrefilledData = !!(prefillName || prefillEmail);
+  // Check if client data is available (from localStorage or prefill)
+  const hasStoredOrPrefilledData = !!(name && name.trim());
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -595,8 +595,8 @@ export default function EmbedChatWidget({
               </div>
             </div>
 
-            {/* Prefilled Client Info Display */}
-            {hasPrefilledData && !isEditingProfile ? (
+            {/* Prefilled/Stored Client Info Display */}
+            {hasStoredOrPrefilledData && !isEditingProfile ? (
               <div className={`mb-4 p-3 rounded-xl border ${
                 isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-gradient-to-br from-slate-50 to-white border-slate-200'
               }`}>
@@ -631,7 +631,7 @@ export default function EmbedChatWidget({
               </div>
             ) : (
               <div className="space-y-3 mb-4">
-                {isEditingProfile && hasPrefilledData && (
+                {isEditingProfile && hasStoredOrPrefilledData && (
                   <div className="flex items-center justify-between mb-1">
                     <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>تعديل البيانات</span>
                     <button
