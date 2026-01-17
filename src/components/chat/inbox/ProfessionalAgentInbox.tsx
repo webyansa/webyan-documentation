@@ -668,30 +668,41 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                       <div className="flex items-center gap-2">
                         <Checkbox
                           id="select-all"
-                          checked={selectedArchivedIds.size === archivedConversations.length && archivedConversations.length > 0}
+                          checked={
+                            selectedArchivedIds.size === archivedConversations.length &&
+                            archivedConversations.length > 0
+                          }
                           onCheckedChange={(checked) => {
                             if (checked) {
-                              setSelectedArchivedIds(new Set(archivedConversations.map(c => c.id)));
+                              setSelectedArchivedIds(new Set(archivedConversations.map((c) => c.id)));
                             } else {
                               setSelectedArchivedIds(new Set());
                             }
                           }}
                         />
-                        <label htmlFor="select-all" className="text-xs text-muted-foreground cursor-pointer">
+                        <label
+                          htmlFor="select-all"
+                          className="text-xs text-muted-foreground cursor-pointer"
+                        >
                           تحديد الكل ({archivedConversations.length})
                         </label>
                       </div>
-                      {selectedArchivedIds.size > 0 && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="h-7 text-xs gap-1.5"
-                          onClick={() => setShowBulkDeleteDialog(true)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          حذف المحدد ({selectedArchivedIds.size})
-                        </Button>
-                      )}
+
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        disabled={selectedArchivedIds.size === 0}
+                        onClick={() => setShowBulkDeleteDialog(true)}
+                        title={
+                          selectedArchivedIds.size === 0
+                            ? 'حدد محادثات أولاً'
+                            : `حذف ${selectedArchivedIds.size} محادثة`
+                        }
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        حذف المحدد ({selectedArchivedIds.size})
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -744,7 +755,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                             حُذفت: {conv.archived_at && formatDistanceToNow(new Date(conv.archived_at), { addSuffix: true, locale: ar })}
                           </p>
                         </div>
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 flex-shrink-0">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -766,7 +777,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              className="h-7 w-7 text-destructive bg-destructive/10 hover:bg-destructive/15 hover:text-destructive"
                               onClick={() => setDeleteConfirmId(conv.id)}
                               title="حذف نهائي"
                             >
