@@ -664,7 +664,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                 {/* Bulk Actions Header */}
                 {isAdmin && (
                   <div className="sticky top-0 z-10 bg-card border-b px-3 py-2">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div className="flex items-center gap-2">
                         <Checkbox
                           id="select-all"
@@ -691,7 +691,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                       <Button
                         variant="destructive"
                         size="sm"
-                        className="h-7 text-xs gap-1.5"
+                        className="h-7 text-xs gap-1.5 flex-shrink-0 whitespace-nowrap"
                         disabled={selectedArchivedIds.size === 0}
                         onClick={() => setShowBulkDeleteDialog(true)}
                         title={
