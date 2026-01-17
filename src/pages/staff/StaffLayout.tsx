@@ -53,8 +53,8 @@ export default function StaffLayout() {
       if (!user) {
         navigate('/support/login');
       } else if (!isStaff) {
-        // User is logged in but not staff - redirect to home
-        navigate('/');
+        // User is logged in but not staff - redirect to unauthorized page
+        navigate('/unauthorized?portal=staff&returnUrl=/support', { replace: true });
       }
     }
   }, [user, loading, isStaff, navigate]);

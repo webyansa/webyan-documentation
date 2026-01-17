@@ -109,11 +109,14 @@ const PortalLayout = () => {
 
       const userType = (data?.[0]?.user_type || null) as string | null;
       if (userType === 'staff') {
-        navigate('/support', { replace: true });
+        // Redirect staff to unauthorized page with link to their portal
+        navigate('/unauthorized?portal=client&returnUrl=/support', { replace: true });
       } else if (userType === 'admin' || userType === 'editor') {
-        navigate('/admin', { replace: true });
+        // Redirect admin/editor to unauthorized page with link to their portal
+        navigate('/unauthorized?portal=client&returnUrl=/admin', { replace: true });
       } else {
-        navigate('/portal/login', { replace: true });
+        // Unknown user type - show unauthorized
+        navigate('/unauthorized?portal=client&returnUrl=/', { replace: true });
       }
     } catch {
       navigate('/portal/login', { replace: true });

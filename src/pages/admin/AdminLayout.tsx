@@ -170,8 +170,8 @@ export default function AdminLayout() {
       if (!user) {
         navigate('/admin/login');
       } else if (!isAdminOrEditor) {
-        // User is logged in but not admin/editor - redirect to appropriate portal
-        navigate('/');
+        // User is logged in but not admin/editor - redirect to unauthorized page
+        navigate('/unauthorized?portal=admin&returnUrl=/admin', { replace: true });
       }
     }
   }, [user, loading, isAdminOrEditor, navigate]);
