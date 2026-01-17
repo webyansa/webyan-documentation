@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { 
   MessageCircle, Send, User, Building2, CheckCheck, Check,
@@ -110,6 +111,7 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
     archiveConversation,
     restoreConversation,
     deleteConversation,
+    deleteConversationsBulk,
     toggleStarConversation
   } = useChat({ autoFetch: true });
 
@@ -146,6 +148,9 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
   const [archivedConversations, setArchivedConversations] = useState<Conversation[]>([]);
   const [loadingArchived, setLoadingArchived] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [selectedArchivedIds, setSelectedArchivedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [deletingBulk, setDeletingBulk] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -655,64 +660,124 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
                 <p className="text-sm">سلة المهملات فارغة</p>
               </div>
             ) : (
-              <div className="divide-y">
-                {archivedConversations.map((conv) => (
-                  <div
-                    key={conv.id}
-                    className="px-3 py-3 hover:bg-muted/50"
-                  >
-                    <div className="flex items-start gap-3">
-                      <Avatar className="h-10 w-10">
-                        {conv.organization?.logo_url && <AvatarImage src={conv.organization.logo_url} />}
-                        <AvatarFallback className="bg-muted text-muted-foreground text-sm">
-                          {conv.organization?.name?.charAt(0) || (conv.metadata as any)?.sender_name?.charAt(0) || <Building2 className="h-4 w-4" />}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-sm truncate">
-                            {conv.organization?.name || (conv.metadata as any)?.sender_name || 'زائر'}
-                          </p>
-                          {(conv as any).is_starred && (
-                            <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {(conv.metadata as any)?.sender_email || conv.organization?.contact_email || 'بدون بريد'}
-                        </p>
-                        <p className="text-xs text-muted-foreground/70 truncate mt-0.5">{conv.last_message_preview}</p>
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          حُذفت: {conv.archived_at && formatDistanceToNow(new Date(conv.archived_at), { addSuffix: true, locale: ar })}
-                        </p>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-green-600 hover:text-green-700"
-                          onClick={async () => { 
-                            await restoreConversation(conv.id); 
-                            fetchArchivedConversations(); 
+              <div>
+                {/* Bulk Actions Header */}
+                {isAdmin && (
+                  <div className="sticky top-0 z-10 bg-card border-b px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="select-all"
+                          checked={selectedArchivedIds.size === archivedConversations.length && archivedConversations.length > 0}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedArchivedIds(new Set(archivedConversations.map(c => c.id)));
+                            } else {
+                              setSelectedArchivedIds(new Set());
+                            }
                           }}
-                          title="استعادة"
+                        />
+                        <label htmlFor="select-all" className="text-xs text-muted-foreground cursor-pointer">
+                          تحديد الكل ({archivedConversations.length})
+                        </label>
+                      </div>
+                      {selectedArchivedIds.size > 0 && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-7 text-xs gap-1.5"
+                          onClick={() => setShowBulkDeleteDialog(true)}
                         >
-                          <RefreshCw className="h-3.5 w-3.5" />
+                          <Trash2 className="h-3.5 w-3.5" />
+                          حذف المحدد ({selectedArchivedIds.size})
                         </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="divide-y">
+                  {archivedConversations.map((conv) => (
+                    <div
+                      key={conv.id}
+                      className={cn(
+                        "px-3 py-3 hover:bg-muted/50 transition-colors",
+                        selectedArchivedIds.has(conv.id) && "bg-primary/5"
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
                         {isAdmin && (
+                          <Checkbox
+                            checked={selectedArchivedIds.has(conv.id)}
+                            onCheckedChange={(checked) => {
+                              const newSet = new Set(selectedArchivedIds);
+                              if (checked) {
+                                newSet.add(conv.id);
+                              } else {
+                                newSet.delete(conv.id);
+                              }
+                              setSelectedArchivedIds(newSet);
+                            }}
+                            className="mt-2"
+                          />
+                        )}
+                        <Avatar className="h-10 w-10">
+                          {conv.organization?.logo_url && <AvatarImage src={conv.organization.logo_url} />}
+                          <AvatarFallback className="bg-muted text-muted-foreground text-sm">
+                            {conv.organization?.name?.charAt(0) || (conv.metadata as any)?.sender_name?.charAt(0) || <Building2 className="h-4 w-4" />}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm truncate">
+                              {conv.organization?.name || (conv.metadata as any)?.sender_name || 'زائر'}
+                            </p>
+                            {(conv as any).is_starred && (
+                              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {(conv.metadata as any)?.sender_email || conv.organization?.contact_email || 'بدون بريد'}
+                          </p>
+                          <p className="text-xs text-muted-foreground/70 truncate mt-0.5">{conv.last_message_preview}</p>
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            حُذفت: {conv.archived_at && formatDistanceToNow(new Date(conv.archived_at), { addSuffix: true, locale: ar })}
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-1">
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-destructive hover:text-destructive"
-                            onClick={() => setDeleteConfirmId(conv.id)}
-                            title="حذف نهائي"
+                            className="h-7 w-7 text-green-600 hover:text-green-700"
+                            onClick={async () => { 
+                              await restoreConversation(conv.id); 
+                              setSelectedArchivedIds(prev => {
+                                const newSet = new Set(prev);
+                                newSet.delete(conv.id);
+                                return newSet;
+                              });
+                              fetchArchivedConversations(); 
+                            }}
+                            title="استعادة"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <RefreshCw className="h-3.5 w-3.5" />
                           </Button>
-                        )}
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => setDeleteConfirmId(conv.id)}
+                              title="حذف نهائي"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )
           ) : activeTab === 'customers' && viewMode === 'grouped' && !selectedClient ? (
@@ -1629,6 +1694,58 @@ export default function ProfessionalAgentInbox({ isAdmin = false }: Professional
               }}
             >
               حذف نهائياً
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              تأكيد الحذف النهائي المتعدد
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">
+              هل أنت متأكد من حذف <strong>{selectedArchivedIds.size}</strong> محادثة نهائياً؟ لا يمكن استرجاع المحادثات بعد الحذف.
+            </p>
+            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+              <p className="text-sm text-destructive font-medium">
+                ⚠️ سيتم حذف جميع الرسائل والمرفقات المرتبطة بهذه المحادثات.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowBulkDeleteDialog(false)} disabled={deletingBulk}>
+              إلغاء
+            </Button>
+            <Button 
+              variant="destructive" 
+              disabled={deletingBulk}
+              onClick={async () => {
+                if (selectedArchivedIds.size > 0) {
+                  setDeletingBulk(true);
+                  const success = await deleteConversationsBulk(Array.from(selectedArchivedIds));
+                  if (success) {
+                    setSelectedArchivedIds(new Set());
+                    fetchArchivedConversations();
+                  }
+                  setDeletingBulk(false);
+                  setShowBulkDeleteDialog(false);
+                }
+              }}
+            >
+              {deletingBulk ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                  جاري الحذف...
+                </>
+              ) : (
+                `حذف ${selectedArchivedIds.size} محادثة`
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

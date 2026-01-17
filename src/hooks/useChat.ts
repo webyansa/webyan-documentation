@@ -278,6 +278,28 @@ export function useChat(options: UseChatOptions = {}) {
     }
   }, [callChatAPI, fetchConversations, toast]);
 
+  const deleteConversationsBulk = useCallback(async (conversationIds: string[]) => {
+    try {
+      await callChatAPI('delete_bulk', { conversationIds });
+      toast({
+        title: 'تم',
+        description: `تم حذف ${conversationIds.length} محادثة نهائياً`
+      });
+      await fetchConversations();
+      setCurrentConversation(null);
+      setMessages([]);
+      return true;
+    } catch (error) {
+      console.error('Error bulk deleting conversations:', error);
+      toast({
+        title: 'خطأ',
+        description: 'فشل في حذف المحادثات',
+        variant: 'destructive'
+      });
+      return false;
+    }
+  }, [callChatAPI, fetchConversations, toast]);
+
   const toggleStarConversation = useCallback(async (conversationId: string, isStarred: boolean) => {
     try {
       await callChatAPI('toggle_star', { conversationId, isStarred: !isStarred });
@@ -439,6 +461,7 @@ export function useChat(options: UseChatOptions = {}) {
     archiveConversation,
     restoreConversation,
     deleteConversation,
+    deleteConversationsBulk,
     toggleStarConversation
   };
 }

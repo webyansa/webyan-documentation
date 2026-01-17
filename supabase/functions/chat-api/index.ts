@@ -7,8 +7,9 @@ const corsHeaders = {
 };
 
 interface ChatRequest {
-  action: 'start_conversation' | 'send_message' | 'get_messages' | 'get_conversations' | 'get_conversation' | 'mark_read' | 'assign' | 'close' | 'reopen' | 'convert_to_ticket' | 'archive' | 'restore' | 'delete_permanently' | 'get_archived' | 'toggle_star';
+  action: 'start_conversation' | 'send_message' | 'get_messages' | 'get_conversations' | 'get_conversation' | 'mark_read' | 'assign' | 'close' | 'reopen' | 'convert_to_ticket' | 'archive' | 'restore' | 'delete_permanently' | 'delete_bulk' | 'get_archived' | 'toggle_star';
   conversationId?: string;
+  conversationIds?: string[];
   message?: string;
   attachments?: string[];
   subject?: string;
@@ -989,6 +990,56 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'delete_bulk': {
+        if (!isPrivileged) {
+          return new Response(
+            JSON.stringify({ error: 'Admin access required' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (!body.conversationIds || body.conversationIds.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation IDs required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Bulk deleting ${body.conversationIds.length} conversations`);
+
+        // Delete all related data for each conversation
+        for (const convId of body.conversationIds) {
+          // Delete messages
+          await supabase
+            .from('conversation_messages')
+            .delete()
+            .eq('conversation_id', convId);
+
+          // Delete events
+          await supabase
+            .from('conversation_events')
+            .delete()
+            .eq('conversation_id', convId);
+
+          // Delete typing indicators
+          await supabase
+            .from('typing_indicators')
+            .delete()
+            .eq('conversation_id', convId);
+
+          // Delete conversation
+          await supabase
+            .from('conversations')
+            .delete()
+            .eq('id', convId);
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, deleted: body.conversationIds.length }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
