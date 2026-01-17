@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useStaffAuth } from '@/hooks/useStaffAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,28 +10,44 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Mail, Lock, ArrowRight, Home, Headphones, Shield, Building2 } from 'lucide-react';
 import { z } from 'zod';
 import webyanLogo from '@/assets/webyan-logo.svg';
+import { rolesInfo, type AppRole } from '@/lib/permissions';
 
 const emailSchema = z.string().email('البريد الإلكتروني غير صالح');
 const passwordSchema = z.string().min(6, 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
 
 export default function SupportLoginPage() {
   const navigate = useNavigate();
-  const { user, loading, signIn, isAdminOrEditor } = useAuth();
-  const { isStaff, loading: staffLoading } = useStaffAuth();
+  const { user, loading, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
+  // Redirect based on role after login
   useEffect(() => {
-    if (user && !loading && !staffLoading) {
-      if (isStaff) {
-        navigate('/support', { replace: true });
-      } else if (isAdminOrEditor) {
-        navigate('/admin', { replace: true });
-      }
+    if (user && !loading) {
+      setIsRedirecting(true);
+      
+      // Fetch user type and redirect accordingly
+      supabase.rpc('get_user_type', { _user_id: user.id })
+        .then(({ data, error: rpcError }) => {
+          if (rpcError || !data || data.length === 0) {
+            setIsRedirecting(false);
+            return;
+          }
+          
+          const userType = data[0]?.user_type as AppRole | null;
+          
+          if (userType && rolesInfo[userType]) {
+            const targetPath = rolesInfo[userType].dashboardPath;
+            navigate(targetPath, { replace: true });
+          } else {
+            setIsRedirecting(false);
+          }
+        });
     }
-  }, [user, loading, staffLoading, isStaff, isAdminOrEditor, navigate]);
+  }, [user, loading, navigate]);
 
   const validateInputs = () => {
     try {
@@ -67,12 +83,14 @@ export default function SupportLoginPage() {
     }
   };
 
-  if (loading || staffLoading) {
+  if (loading || isRedirecting) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">جاري التحقق من الحساب...</p>
+          <p className="text-muted-foreground">
+            {isRedirecting ? 'جاري التوجيه للبوابة المناسبة...' : 'جاري التحقق من الحساب...'}
+          </p>
         </div>
       </div>
     );
