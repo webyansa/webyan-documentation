@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface ChatRequest {
-  action: 'start_conversation' | 'send_message' | 'get_messages' | 'get_conversations' | 'get_conversation' | 'mark_read' | 'assign' | 'close' | 'reopen' | 'convert_to_ticket';
+  action: 'start_conversation' | 'send_message' | 'get_messages' | 'get_conversations' | 'get_conversation' | 'mark_read' | 'assign' | 'close' | 'reopen' | 'convert_to_ticket' | 'archive' | 'restore' | 'delete_permanently' | 'get_archived';
   conversationId?: string;
   message?: string;
   attachments?: string[];
@@ -465,6 +465,7 @@ serve(async (req) => {
             organization:client_organizations(id, name, contact_email, logo_url),
             assigned_agent:staff_members(id, full_name, agent_status)
           `)
+          .is('archived_at', null) // Exclude archived conversations
           .order('last_message_at', { ascending: false, nullsFirst: false });
 
         // Admins/editors: all conversations
@@ -810,6 +811,154 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ ticket }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'archive': {
+        if (!canAgentAct) {
+          return new Response(
+            JSON.stringify({ error: 'Staff access required' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (!body.conversationId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await supabase
+          .from('conversations')
+          .update({ 
+            archived_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', body.conversationId);
+
+        // Get staff name
+        const { data: archiveStaff } = await supabase
+          .from('staff_members')
+          .select('full_name')
+          .eq('id', staffId)
+          .single();
+
+        await supabase.from('conversation_events').insert({
+          conversation_id: body.conversationId,
+          event_type: 'archived',
+          performed_by: staffId,
+          performer_name: archiveStaff?.full_name
+        });
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'restore': {
+        if (!canAgentAct) {
+          return new Response(
+            JSON.stringify({ error: 'Staff access required' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (!body.conversationId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await supabase
+          .from('conversations')
+          .update({ 
+            archived_at: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', body.conversationId);
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'delete_permanently': {
+        if (!isPrivileged) {
+          return new Response(
+            JSON.stringify({ error: 'Admin access required' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (!body.conversationId) {
+          return new Response(
+            JSON.stringify({ error: 'Conversation ID required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Delete messages first
+        await supabase
+          .from('conversation_messages')
+          .delete()
+          .eq('conversation_id', body.conversationId);
+
+        // Delete events
+        await supabase
+          .from('conversation_events')
+          .delete()
+          .eq('conversation_id', body.conversationId);
+
+        // Delete typing indicators
+        await supabase
+          .from('typing_indicators')
+          .delete()
+          .eq('conversation_id', body.conversationId);
+
+        // Delete conversation
+        await supabase
+          .from('conversations')
+          .delete()
+          .eq('id', body.conversationId);
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      case 'get_archived': {
+        if (!canAgentAct) {
+          return new Response(
+            JSON.stringify({ error: 'Staff access required' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const { data: archivedConvs, error } = await supabase
+          .from('conversations')
+          .select(`
+            *,
+            organization:client_organizations(id, name, contact_email, logo_url),
+            assigned_agent:staff_members(id, full_name, agent_status)
+          `)
+          .not('archived_at', 'is', null)
+          .order('archived_at', { ascending: false });
+
+        if (error) {
+          return new Response(
+            JSON.stringify({ error: 'Failed to get archived conversations' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ conversations: archivedConvs || [] }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
