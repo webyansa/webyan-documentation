@@ -50,6 +50,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const logActivity = useCallback(async (
+    userId: string, 
+    email: string, 
+    actionType: string, 
+    actionDetails?: string
+  ) => {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+
+      await supabase.rpc('log_user_activity', {
+        p_user_id: userId,
+        p_user_email: email,
+        p_user_name: profile?.full_name || email,
+        p_action_type: actionType,
+        p_action_details: actionDetails || null,
+        p_metadata: null
+      });
+    } catch (error) {
+      console.error('Error logging activity:', error);
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 
@@ -60,6 +86,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         setSession(newSession);
         setUser(newSession?.user ?? null);
+        
+        // Log login/logout events
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          logActivity(
+            newSession.user.id,
+            newSession.user.email || '',
+            'login',
+            'تسجيل دخول إلى النظام'
+          );
+        } else if (event === 'SIGNED_OUT' && session?.user) {
+          logActivity(
+            session.user.id,
+            session.user.email || '',
+            'logout',
+            'تسجيل خروج من النظام'
+          );
+        }
         
         // Defer role fetching to avoid deadlock
         if (newSession?.user) {
@@ -97,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchUserRole]);
+  }, [fetchUserRole, logActivity, session]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({

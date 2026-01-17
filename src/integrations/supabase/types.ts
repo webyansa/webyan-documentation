@@ -1533,6 +1533,45 @@ export type Database = {
           },
         ]
       }
+      user_activity_log: {
+        Row: {
+          action_details: string | null
+          action_type: string
+          created_at: string
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          user_agent: string | null
+          user_email: string | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          action_details?: string | null
+          action_type: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          user_agent?: string | null
+          user_email?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          action_details?: string | null
+          action_type?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          user_agent?: string | null
+          user_email?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: []
+      }
       user_notifications: {
         Row: {
           article_id: string | null
@@ -1640,6 +1679,17 @@ export type Database = {
       is_client: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       is_support_agent: { Args: { _user_id: string }; Returns: boolean }
+      log_user_activity: {
+        Args: {
+          p_action_details?: string
+          p_action_type: string
+          p_metadata?: Json
+          p_user_email: string
+          p_user_id: string
+          p_user_name: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       agent_status: "available" | "busy" | "offline"

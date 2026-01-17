@@ -51,6 +51,8 @@ import AdminChatPage from "./pages/admin/AdminChatPage";
 import QuickRepliesPage from "./pages/admin/QuickRepliesPage";
 import ChatEmbedSettingsPage from "./pages/admin/ChatEmbedSettingsPage";
 import ArchivedChatsPage from "./pages/admin/ArchivedChatsPage";
+import RolesManagementPage from "./pages/admin/RolesManagementPage";
+import ActivityLogPage from "./pages/admin/ActivityLogPage";
 import EmbedChatPage from "./pages/embed/EmbedChatPage";
 
 // Client Portal pages
@@ -157,6 +159,8 @@ const App = () => (
                 <Route path="quick-replies" element={<QuickRepliesPage />} />
                 <Route path="chat-embed" element={<ChatEmbedSettingsPage />} />
                 <Route path="archived-chats" element={<ArchivedChatsPage />} />
+                <Route path="roles" element={<RolesManagementPage />} />
+                <Route path="activity-log" element={<ActivityLogPage />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />

@@ -151,6 +151,8 @@ const settingsSection: NavSection = {
   adminOnly: true,
   items: [
     { title: 'المستخدمين', href: '/admin/users', icon: Users, requiredRole: 'admin' },
+    { title: 'الأدوار والصلاحيات', href: '/admin/roles', icon: Shield, requiredRole: 'admin' },
+    { title: 'سجل النشاط', href: '/admin/activity-log', icon: History, requiredRole: 'admin' },
     { title: 'سجل البحث', href: '/admin/search-logs', icon: Search, requiredRole: 'admin' },
     { title: 'الإعدادات العامة', href: '/admin/settings', icon: Settings, requiredRole: 'admin' },
   ]
