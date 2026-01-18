@@ -576,15 +576,15 @@ export default function AdminTicketsPage() {
           <Card>
             <CardContent className="p-0">
               {/* Table Header */}
-              <div className="hidden md:grid grid-cols-12 gap-4 p-4 bg-muted/50 text-xs font-medium text-muted-foreground border-b">
-                <div className="col-span-1">الرقم</div>
-                <div className="col-span-3">الموضوع</div>
-                <div className="col-span-2">العميل</div>
-                <div className="col-span-1">الأولوية</div>
-                <div className="col-span-1">الحالة</div>
-                <div className="col-span-2">الموظف المسؤول</div>
-                <div className="col-span-1">التاريخ</div>
-                <div className="col-span-1">إجراءات</div>
+              <div className="hidden md:grid grid-cols-[80px_1fr_150px_100px_110px_180px_100px_60px] gap-3 p-4 bg-muted/50 text-xs font-medium text-muted-foreground border-b">
+                <div>الرقم</div>
+                <div>الموضوع والعميل</div>
+                <div>الأولوية</div>
+                <div>الحالة</div>
+                <div>الموظف المسؤول</div>
+                <div></div>
+                <div>التاريخ</div>
+                <div>إجراءات</div>
               </div>
 
               {/* Table Body */}
@@ -596,69 +596,57 @@ export default function AdminTicketsPage() {
                   return (
                     <div
                       key={ticket.id}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 hover:bg-muted/30 transition-colors items-center"
+                      className="grid grid-cols-1 md:grid-cols-[80px_1fr_150px_100px_110px_180px_100px_60px] gap-3 p-4 hover:bg-muted/30 transition-colors items-center"
                     >
                       {/* Ticket Number */}
-                      <div className="col-span-1">
+                      <div>
                         <span className="inline-flex items-center gap-1 text-xs font-mono bg-muted px-2 py-1 rounded">
                           <Hash className="h-3 w-3 text-muted-foreground" />
                           {ticket.ticket_number.slice(-6)}
                         </span>
                       </div>
 
-                      {/* Subject */}
-                      <div className="col-span-3">
+                      {/* Subject & Client Combined */}
+                      <div>
                         <button
                           onClick={() => handleViewTicket(ticket)}
-                          className="text-right hover:text-primary transition-colors"
+                          className="text-right hover:text-primary transition-colors w-full"
                         >
                           <p className="font-medium text-sm line-clamp-1">{ticket.subject}</p>
-                          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                            {ticket.description}
-                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Avatar className="h-5 w-5">
+                              <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
+                                {(ticket.organization?.name || ticket.guest_name || 'م')[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs text-muted-foreground truncate">
+                              {ticket.organization?.name || ticket.guest_name || 'مستخدم'} • {categoryLabels[ticket.category] || ticket.category}
+                            </span>
+                          </div>
                         </button>
                       </div>
 
-                      {/* Client */}
-                      <div className="col-span-2">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-7 w-7">
-                            <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                              {(ticket.organization?.name || ticket.guest_name || 'م')[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {ticket.organization?.name || ticket.guest_name || 'مستخدم'}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground truncate">
-                              {categoryLabels[ticket.category] || ticket.category}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
                       {/* Priority */}
-                      <div className="col-span-1">
+                      <div>
                         <Badge 
                           variant="outline" 
-                          className={cn("text-[10px] font-medium border", priority.bg, priority.color)}
+                          className={cn("text-xs font-medium border px-3 py-1", priority.bg, priority.color)}
                         >
                           {priority.label}
                         </Badge>
                       </div>
 
                       {/* Status */}
-                      <div className="col-span-1">
+                      <div>
                         <Select 
                           value={ticket.status} 
                           onValueChange={(v) => handleStatusChange(ticket.id, v)}
                         >
                           <SelectTrigger className={cn(
-                            "h-8 text-xs border-0 gap-2 w-[120px]",
+                            "h-8 text-xs border-0 gap-1.5 w-full",
                             status.bg, status.text
                           )}>
-                            <span className={cn("w-2 h-2 rounded-full", status.dot)} />
+                            <span className={cn("w-2 h-2 rounded-full shrink-0", status.dot)} />
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -670,60 +658,66 @@ export default function AdminTicketsPage() {
                         </Select>
                       </div>
 
-                      {/* Assigned Staff - NEW CLEAR COLUMN */}
-                      <div className="col-span-2">
+                      {/* Assigned Staff Name */}
+                      <div>
                         {ticket.staff ? (
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 flex-1 min-w-0">
-                              <Avatar className="h-6 w-6 border border-emerald-300 shrink-0">
-                                <AvatarFallback className="text-[10px] bg-emerald-100 text-emerald-700 font-semibold">
-                                  {ticket.staff.full_name[0]}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="text-sm font-medium text-emerald-700 truncate">
-                                {ticket.staff.full_name}
-                              </span>
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenAssignDialog(ticket)}
-                              className="h-8 px-2 text-xs gap-1 border-dashed hover:border-primary hover:text-primary shrink-0"
-                            >
-                              <UserPlus className="h-3.5 w-3.5" />
-                              تغيير
-                            </Button>
+                          <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1">
+                            <Avatar className="h-5 w-5 border border-emerald-300 shrink-0">
+                              <AvatarFallback className="text-[8px] bg-emerald-100 text-emerald-700 font-semibold">
+                                {ticket.staff.full_name[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs font-medium text-emerald-700 truncate">
+                              {ticket.staff.full_name}
+                            </span>
                           </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </div>
+
+                      {/* Assign/Reassign Button */}
+                      <div>
+                        {ticket.staff ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenAssignDialog(ticket)}
+                            className="h-8 px-3 text-xs gap-1.5 border-dashed hover:border-primary hover:text-primary w-full"
+                          >
+                            <UserPlus className="h-3.5 w-3.5" />
+                            تغيير
+                          </Button>
                         ) : (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenAssignDialog(ticket)}
-                            className="h-9 px-4 text-xs gap-2 border-dashed border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-400 hover:text-amber-800"
+                            className="h-8 px-3 text-xs gap-1.5 border-dashed border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-400 w-full"
                           >
-                            <UserPlus className="h-4 w-4" />
-                            توجيه لموظف
+                            <UserPlus className="h-3.5 w-3.5" />
+                            توجيه
                           </Button>
                         )}
                       </div>
 
                       {/* Date */}
-                      <div className="col-span-1">
+                      <div>
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Calendar className="h-3.5 w-3.5" />
-                          {formatSmartDate(ticket.created_at)}
+                          <Calendar className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{formatSmartDate(ticket.created_at)}</span>
                         </div>
                       </div>
 
                       {/* Actions */}
-                      <div className="col-span-1">
+                      <div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="bg-background">
                             <DropdownMenuItem onClick={() => handleViewTicket(ticket)}>
                               <Eye className="h-4 w-4 ml-2" />
                               عرض التفاصيل
