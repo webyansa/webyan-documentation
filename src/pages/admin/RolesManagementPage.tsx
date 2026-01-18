@@ -29,6 +29,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Users, 
   Loader2, 
@@ -37,6 +38,8 @@ import {
   XCircle,
   Info,
   AlertTriangle,
+  ShieldAlert,
+  Eye,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -58,9 +61,29 @@ interface UserWithRole {
   role: AppRole | null;
 }
 
+interface StaffMember {
+  id: string;
+  user_id: string | null;
+  full_name: string;
+  email: string;
+  can_reply_tickets: boolean;
+  can_manage_content: boolean;
+  can_attend_meetings: boolean;
+  is_active: boolean;
+  role: AppRole | null;
+}
+
+type ConsistencyIssue = {
+  staffId: string;
+  staffName: string;
+  issue: string;
+  severity: 'warning' | 'error';
+};
+
 export default function RolesManagementPage() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserWithRole[]>([]);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,19 +95,29 @@ export default function RolesManagementPage() {
     oldRole: AppRole | null;
     newRole: AppRole;
   } | null>(null);
+  const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
 
   useEffect(() => {
-    fetchUsers();
+    fetchData();
   }, []);
 
-  const fetchUsers = async () => {
+  const fetchData = async () => {
     try {
+      // Fetch profiles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, email, full_name, created_at')
         .order('created_at', { ascending: false });
 
       if (profilesError) throw profilesError;
+
+      // Fetch staff members
+      const { data: staff, error: staffError } = await supabase
+        .from('staff_members')
+        .select('id, user_id, full_name, email, can_reply_tickets, can_manage_content, can_attend_meetings, is_active')
+        .order('created_at', { ascending: false });
+
+      if (staffError) throw staffError;
 
       const usersWithRoles: UserWithRole[] = [];
       
@@ -101,10 +134,29 @@ export default function RolesManagementPage() {
         });
       }
 
+      // Add role info to staff members
+      const staffWithRoles: StaffMember[] = [];
+      for (const s of staff || []) {
+        let role: AppRole | null = null;
+        if (s.user_id) {
+          const { data: roleData } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', s.user_id)
+            .maybeSingle();
+          role = (roleData?.role as AppRole) || null;
+        }
+        staffWithRoles.push({
+          ...s,
+          role,
+        });
+      }
+
       setUsers(usersWithRoles);
+      setStaffMembers(staffWithRoles);
     } catch (error) {
-      console.error('Error fetching users:', error);
-      toast.error('حدث خطأ أثناء تحميل المستخدمين');
+      console.error('Error fetching data:', error);
+      toast.error('حدث خطأ أثناء تحميل البيانات');
     } finally {
       setLoading(false);
     }
@@ -125,13 +177,11 @@ export default function RolesManagementPage() {
     setConfirmDialog(null);
 
     try {
-      // Delete existing role
       await supabase
         .from('user_roles')
         .delete()
         .eq('user_id', userId);
 
-      // Insert new role (only if not null/removing)
       if (newRole) {
         const { error } = await supabase
           .from('user_roles')
@@ -147,6 +197,7 @@ export default function RolesManagementPage() {
       const oldRoleName = oldRole ? rolesInfo[oldRole].name : 'بدون دور';
       const newRoleName = rolesInfo[newRole].name;
       toast.success(`تم تغيير الصلاحية من "${oldRoleName}" إلى "${newRoleName}"`);
+      fetchData();
     } catch (error) {
       console.error('Error updating role:', error);
       toast.error('حدث خطأ أثناء تحديث الصلاحية');
@@ -186,6 +237,81 @@ export default function RolesManagementPage() {
     );
   };
 
+  // Check consistency issues for staff members
+  const getConsistencyIssues = (): ConsistencyIssue[] => {
+    const issues: ConsistencyIssue[] = [];
+
+    for (const staff of staffMembers) {
+      // Staff without user account
+      if (!staff.user_id) {
+        issues.push({
+          staffId: staff.id,
+          staffName: staff.full_name,
+          issue: 'لا يوجد حساب مستخدم مرتبط (لا يستطيع تسجيل الدخول)',
+          severity: 'error',
+        });
+        continue;
+      }
+
+      // Staff with wrong role
+      if (staff.role && staff.role !== 'support_agent' && staff.role !== 'admin' && staff.role !== 'editor') {
+        issues.push({
+          staffId: staff.id,
+          staffName: staff.full_name,
+          issue: `دور "${rolesInfo[staff.role]?.name || staff.role}" غير متوافق مع صلاحيات الموظف`,
+          severity: 'error',
+        });
+      }
+
+      // Staff without role
+      if (!staff.role) {
+        issues.push({
+          staffId: staff.id,
+          staffName: staff.full_name,
+          issue: 'لا يوجد دور مسند للموظف',
+          severity: 'warning',
+        });
+      }
+
+      // Role vs permissions mismatch
+      if (staff.role === 'support_agent') {
+        if (!staff.can_reply_tickets && !staff.can_attend_meetings) {
+          issues.push({
+            staffId: staff.id,
+            staffName: staff.full_name,
+            issue: 'دور "دعم فني" بدون صلاحيات فعلية (الرد على التذاكر أو حضور الاجتماعات)',
+            severity: 'warning',
+          });
+        }
+      }
+
+      if (staff.role === 'editor') {
+        if (!staff.can_manage_content) {
+          issues.push({
+            staffId: staff.id,
+            staffName: staff.full_name,
+            issue: 'دور "محرر" بدون صلاحية إدارة المحتوى',
+            severity: 'warning',
+          });
+        }
+      }
+
+      // Inactive staff with active role
+      if (!staff.is_active && staff.role) {
+        issues.push({
+          staffId: staff.id,
+          staffName: staff.full_name,
+          issue: 'موظف غير نشط ولديه دور مُسند',
+          severity: 'warning',
+        });
+      }
+    }
+
+    return issues;
+  };
+
+  const consistencyIssues = getConsistencyIssues();
+
   const filteredUsers = users.filter(user => {
     const matchesSearch = 
       (user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
@@ -206,34 +332,26 @@ export default function RolesManagementPage() {
 
   // Permission labels for matrix
   const permissionLabels: { key: keyof RolePermissions; label: string; category: string }[] = [
-    // Admin Dashboard
     { key: 'canAccessAdminDashboard', label: 'الوصول للوحة التحكم', category: 'لوحة التحكم' },
     { key: 'canViewReports', label: 'عرض التقارير والإحصائيات', category: 'لوحة التحكم' },
-    // User Management
     { key: 'canManageUsers', label: 'إدارة المستخدمين', category: 'إدارة المستخدمين' },
     { key: 'canManageRoles', label: 'إدارة الأدوار والصلاحيات', category: 'إدارة المستخدمين' },
-    // Content Management
     { key: 'canManageArticles', label: 'إدارة المقالات', category: 'إدارة المحتوى' },
     { key: 'canManageContentTree', label: 'إدارة شجرة المحتوى', category: 'إدارة المحتوى' },
     { key: 'canManageMedia', label: 'إدارة الوسائط', category: 'إدارة المحتوى' },
     { key: 'canManageTags', label: 'إدارة الوسوم', category: 'إدارة المحتوى' },
-    // Support (Admin)
     { key: 'canViewAllTickets', label: 'عرض جميع التذاكر', category: 'الدعم الفني' },
     { key: 'canViewAllChats', label: 'عرض جميع المحادثات', category: 'الدعم الفني' },
     { key: 'canViewAllMeetings', label: 'عرض جميع الاجتماعات', category: 'الدعم الفني' },
     { key: 'canManageEscalation', label: 'إدارة التصعيد', category: 'الدعم الفني' },
-    // Client Management
     { key: 'canManageClients', label: 'إدارة العملاء', category: 'العملاء' },
     { key: 'canManageStaff', label: 'إدارة الموظفين', category: 'الموظفين' },
-    // System
     { key: 'canManageSystemSettings', label: 'الإعدادات العامة', category: 'النظام' },
     { key: 'canViewActivityLogs', label: 'سجل النشاط', category: 'النظام' },
-    // Support Portal
     { key: 'canAccessSupportPortal', label: 'الوصول لبوابة الدعم', category: 'بوابة الدعم' },
     { key: 'canReplyToAssignedTickets', label: 'الرد على التذاكر الموجهة', category: 'بوابة الدعم' },
     { key: 'canManageAssignedChats', label: 'إدارة المحادثات الموجهة', category: 'بوابة الدعم' },
     { key: 'canAttendAssignedMeetings', label: 'حضور الاجتماعات الموجهة', category: 'بوابة الدعم' },
-    // Client Portal
     { key: 'canAccessClientPortal', label: 'الوصول لبوابة العملاء', category: 'بوابة العملاء' },
     { key: 'canCreateTickets', label: 'فتح تذاكر الدعم', category: 'بوابة العملاء' },
     { key: 'canCreateChats', label: 'بدء محادثات', category: 'بوابة العملاء' },
@@ -259,11 +377,24 @@ export default function RolesManagementPage() {
       </div>
 
       <Tabs defaultValue="users" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl">
           <TabsTrigger value="users">المستخدمين</TabsTrigger>
-          <TabsTrigger value="roles">الأدوار والصلاحيات</TabsTrigger>
+          <TabsTrigger value="staff">صلاحيات الموظفين</TabsTrigger>
+          <TabsTrigger value="consistency" className="relative">
+            فحص الاتساق
+            {consistencyIssues.length > 0 && (
+              <Badge 
+                variant="destructive" 
+                className="absolute -top-2 -left-2 h-5 w-5 p-0 flex items-center justify-center text-xs"
+              >
+                {consistencyIssues.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="roles">مصفوفة الصلاحيات</TabsTrigger>
         </TabsList>
 
+        {/* Users Tab */}
         <TabsContent value="users" className="space-y-6">
           {/* Stats */}
           <div className="grid gap-4 md:grid-cols-5">
@@ -274,7 +405,7 @@ export default function RolesManagementPage() {
               return (
                 <Card 
                   key={role} 
-                  className="cursor-pointer hover:bg-muted/50 transition-colors" 
+                  className={`cursor-pointer transition-colors ${filterRole === role ? 'ring-2 ring-primary' : 'hover:bg-muted/50'}`}
                   onClick={() => setFilterRole(filterRole === role ? 'all' : role)}
                 >
                   <CardHeader className="pb-2">
@@ -289,20 +420,6 @@ export default function RolesManagementPage() {
                 </Card>
               );
             })}
-            <Card 
-              className="cursor-pointer hover:bg-muted/50 transition-colors border-dashed" 
-              onClick={() => setFilterRole('all')}
-            >
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <XCircle className="h-4 w-4 text-muted-foreground" />
-                  بدون دور
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{roleStats.none}</div>
-              </CardContent>
-            </Card>
           </div>
 
           {/* Filters */}
@@ -419,6 +536,192 @@ export default function RolesManagementPage() {
           </Card>
         </TabsContent>
 
+        {/* Staff Permissions Tab */}
+        <TabsContent value="staff" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                صلاحيات الموظفين الفعلية
+              </CardTitle>
+              <CardDescription>
+                عرض الدور والصلاحيات الفعلية لكل موظف في النظام
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {staffMembers.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">لا يوجد موظفين</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>الموظف</TableHead>
+                      <TableHead>الدور</TableHead>
+                      <TableHead className="text-center">الرد على التذاكر</TableHead>
+                      <TableHead className="text-center">إدارة المحتوى</TableHead>
+                      <TableHead className="text-center">حضور الاجتماعات</TableHead>
+                      <TableHead>الحالة</TableHead>
+                      <TableHead>الإجراءات</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {staffMembers.map((staff) => {
+                      const hasIssue = consistencyIssues.some(i => i.staffId === staff.id);
+                      return (
+                        <TableRow key={staff.id} className={hasIssue ? 'bg-amber-50' : ''}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-8 w-8">
+                                <AvatarFallback className="bg-orange-100 text-orange-700 text-sm">
+                                  {staff.full_name.charAt(0).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-medium flex items-center gap-2">
+                                  {staff.full_name}
+                                  {hasIssue && (
+                                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                  )}
+                                </p>
+                                <p className="text-xs text-muted-foreground" dir="ltr">
+                                  {staff.email}
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{getRoleBadge(staff.role)}</TableCell>
+                          <TableCell className="text-center">
+                            {staff.can_reply_tickets ? (
+                              <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" />
+                            ) : (
+                              <XCircle className="h-5 w-5 text-muted-foreground/30 mx-auto" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {staff.can_manage_content ? (
+                              <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" />
+                            ) : (
+                              <XCircle className="h-5 w-5 text-muted-foreground/30 mx-auto" />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {staff.can_attend_meetings ? (
+                              <CheckCircle2 className="h-5 w-5 text-green-500 mx-auto" />
+                            ) : (
+                              <XCircle className="h-5 w-5 text-muted-foreground/30 mx-auto" />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {staff.is_active ? (
+                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                نشط
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                                غير نشط
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedStaff(staff)}
+                            >
+                              <Eye className="h-4 w-4 ml-1" />
+                              التفاصيل
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Consistency Check Tab */}
+        <TabsContent value="consistency" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 text-amber-500" />
+                فحص اتساق الأدوار والصلاحيات
+              </CardTitle>
+              <CardDescription>
+                التحقق من توافق الأدوار المُسندة مع الصلاحيات الفعلية
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {consistencyIssues.length === 0 ? (
+                <div className="text-center py-12">
+                  <CheckCircle2 className="h-16 w-16 mx-auto text-green-500 mb-4" />
+                  <h3 className="text-lg font-semibold text-green-700">لا توجد مشاكل اتساق</h3>
+                  <p className="text-muted-foreground mt-2">
+                    جميع الأدوار متوافقة مع الصلاحيات الفعلية
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 p-4 bg-amber-50 rounded-lg border border-amber-200">
+                    <AlertTriangle className="h-6 w-6 text-amber-600 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-amber-800">
+                        تم اكتشاف {consistencyIssues.length} مشكلة اتساق
+                      </p>
+                      <p className="text-sm text-amber-700">
+                        يُرجى مراجعة المشاكل التالية وإصلاحها لضمان عمل النظام بشكل صحيح
+                      </p>
+                    </div>
+                  </div>
+
+                  <ScrollArea className="h-[400px]">
+                    <div className="space-y-3">
+                      {consistencyIssues.map((issue, idx) => (
+                        <Card 
+                          key={idx} 
+                          className={issue.severity === 'error' 
+                            ? 'border-red-200 bg-red-50' 
+                            : 'border-amber-200 bg-amber-50'
+                          }
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-3">
+                              {issue.severity === 'error' ? (
+                                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                              ) : (
+                                <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                              )}
+                              <div>
+                                <p className={`font-medium ${
+                                  issue.severity === 'error' ? 'text-red-800' : 'text-amber-800'
+                                }`}>
+                                  {issue.staffName}
+                                </p>
+                                <p className={`text-sm ${
+                                  issue.severity === 'error' ? 'text-red-700' : 'text-amber-700'
+                                }`}>
+                                  {issue.issue}
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Roles Matrix Tab */}
         <TabsContent value="roles" className="space-y-6">
           {/* Role Cards */}
           <div className="grid gap-6 md:grid-cols-2">
@@ -523,7 +826,7 @@ export default function RolesManagementPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Confirm Dialog */}
+      {/* Confirm Role Change Dialog */}
       <Dialog open={!!confirmDialog} onOpenChange={() => setConfirmDialog(null)}>
         <DialogContent>
           <DialogHeader>
@@ -565,6 +868,118 @@ export default function RolesManagementPage() {
             </Button>
             <Button onClick={handleRoleChange}>
               تأكيد التغيير
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Staff Details Dialog */}
+      <Dialog open={!!selectedStaff} onOpenChange={() => setSelectedStaff(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>تفاصيل صلاحيات الموظف</DialogTitle>
+            <DialogDescription>
+              {selectedStaff?.full_name}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedStaff && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-12 w-12">
+                  <AvatarFallback className="bg-orange-100 text-orange-700">
+                    {selectedStaff.full_name.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold">{selectedStaff.full_name}</p>
+                  <p className="text-sm text-muted-foreground" dir="ltr">{selectedStaff.email}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <span>الدور المسند:</span>
+                  {getRoleBadge(selectedStaff.role)}
+                </div>
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <span>حالة الحساب:</span>
+                  {selectedStaff.is_active ? (
+                    <Badge variant="outline" className="bg-green-50 text-green-700">نشط</Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-red-50 text-red-700">غير نشط</Badge>
+                  )}
+                </div>
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <span>حساب مستخدم مرتبط:</span>
+                  {selectedStaff.user_id ? (
+                    <Badge variant="outline" className="bg-green-50 text-green-700">مرتبط</Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-red-50 text-red-700">غير مرتبط</Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="font-medium">الصلاحيات الفعلية:</p>
+                <div className="grid gap-2">
+                  <div className={`flex items-center gap-3 p-2 rounded-lg ${
+                    selectedStaff.can_reply_tickets ? 'bg-green-50' : 'bg-gray-50'
+                  }`}>
+                    {selectedStaff.can_reply_tickets ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-muted-foreground/50" />
+                    )}
+                    <span>الرد على التذاكر</span>
+                  </div>
+                  <div className={`flex items-center gap-3 p-2 rounded-lg ${
+                    selectedStaff.can_manage_content ? 'bg-green-50' : 'bg-gray-50'
+                  }`}>
+                    {selectedStaff.can_manage_content ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-muted-foreground/50" />
+                    )}
+                    <span>إدارة المحتوى</span>
+                  </div>
+                  <div className={`flex items-center gap-3 p-2 rounded-lg ${
+                    selectedStaff.can_attend_meetings ? 'bg-green-50' : 'bg-gray-50'
+                  }`}>
+                    {selectedStaff.can_attend_meetings ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-muted-foreground/50" />
+                    )}
+                    <span>حضور الاجتماعات</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Show issues for this staff */}
+              {consistencyIssues.filter(i => i.staffId === selectedStaff.id).length > 0 && (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="font-medium text-amber-800 mb-2 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    مشاكل الاتساق:
+                  </p>
+                  <ul className="space-y-1">
+                    {consistencyIssues
+                      .filter(i => i.staffId === selectedStaff.id)
+                      .map((issue, idx) => (
+                        <li key={idx} className="text-sm text-amber-700">
+                          • {issue.issue}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedStaff(null)}>
+              إغلاق
             </Button>
           </DialogFooter>
         </DialogContent>
