@@ -445,10 +445,8 @@ export default function ArticleEditorPage() {
         // Clear draft after successful save
         clearDraft();
         
-        // Redirect to edit page of new article
-        if (data?.id) {
-          navigate(`/admin/articles/${data.id}/edit`, { replace: true });
-        }
+        // Redirect to articles list page
+        navigate('/admin/articles', { replace: true });
       }
     } catch (error: any) {
       console.error('Error saving article:', error);
