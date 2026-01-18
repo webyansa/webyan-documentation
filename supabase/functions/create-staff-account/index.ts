@@ -8,13 +8,21 @@ const corsHeaders = {
 type StaffRole = 'admin' | 'editor' | 'support_agent';
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  console.log('create-staff-account function called');
+
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing environment variables');
+      throw new Error('خطأ في إعدادات الخادم');
+    }
     
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
@@ -25,6 +33,8 @@ Deno.serve(async (req) => {
 
     // Verify the caller is an admin
     const authHeader = req.headers.get('Authorization');
+    console.log('Auth header present:', !!authHeader);
+    
     if (!authHeader) {
       throw new Error('غير مصرح: لم يتم توفير رمز التوثيق');
     }
@@ -32,22 +42,34 @@ Deno.serve(async (req) => {
     const token = authHeader.replace('Bearer ', '');
     const { data: { user: callerUser }, error: authError } = await supabaseAdmin.auth.getUser(token);
     
+    console.log('Caller user:', callerUser?.id, 'Auth error:', authError?.message);
+    
     if (authError || !callerUser) {
       throw new Error('غير مصرح: رمز التوثيق غير صالح');
     }
 
     // Check if caller is admin
-    const { data: roleData } = await supabaseAdmin
+    const { data: roleData, error: roleCheckError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
       .eq('user_id', callerUser.id)
-      .single();
+      .maybeSingle();
+
+    console.log('Role data:', roleData, 'Role check error:', roleCheckError?.message);
+
+    if (roleCheckError) {
+      console.error('Role check failed:', roleCheckError);
+      throw new Error('فشل التحقق من الصلاحيات');
+    }
 
     if (!roleData || roleData.role !== 'admin') {
       throw new Error('غير مصرح: فقط المدراء يمكنهم إنشاء حسابات الموظفين');
     }
 
+    console.log('Admin verified, parsing request body...');
+
     const requestBody = await req.json();
+    console.log('Request body received:', JSON.stringify({ ...requestBody, password: '***' }));
     const { 
       full_name, 
       email, 

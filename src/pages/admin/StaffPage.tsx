@@ -627,43 +627,28 @@ export default function StaffPage() {
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
+      {/* Add/Edit Dialog - Compact Design */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {selectedStaff ? (
-                <>
-                  <Pencil className="h-5 w-5" />
-                  تعديل بيانات الموظف
-                </>
-              ) : (
-                <>
-                  <Plus className="h-5 w-5" />
-                  إضافة موظف جديد
-                </>
-              )}
+        <DialogContent className="max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              {selectedStaff ? <Pencil className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+              {selectedStaff ? 'تعديل الموظف' : 'إضافة موظف جديد'}
             </DialogTitle>
-            <DialogDescription>
-              {selectedStaff 
-                ? 'قم بتعديل بيانات الموظف وتحديث دوره في النظام' 
-                : 'أدخل بيانات الموظف الجديد وحدد دوره في النظام. سيتم إرسال بيانات الدخول عبر البريد الإلكتروني.'
-              }
-            </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 py-2">
-            {/* Role Selection - Most Important */}
-            <div className="space-y-3 p-4 rounded-lg border-2 border-primary/20 bg-primary/5">
-              <Label className="text-base font-semibold flex items-center gap-2">
-                <Shield className="h-4 w-4 text-primary" />
-                دور الموظف في النظام *
+          <div className="flex-1 overflow-y-auto space-y-4 py-2 px-1">
+            {/* Role Selection */}
+            <div className="space-y-2 p-3 rounded-lg border border-primary/30 bg-primary/5">
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5 text-primary" />
+                الدور في النظام *
               </Label>
               <Select
                 value={formData.role}
                 onValueChange={(value) => handleRoleChange(value as StaffRole)}
               >
-                <SelectTrigger className="w-full h-12">
+                <SelectTrigger className="h-10">
                   <SelectValue placeholder="اختر الدور" />
                 </SelectTrigger>
                 <SelectContent>
@@ -672,148 +657,124 @@ export default function StaffPage() {
                     const Icon = info.icon;
                     return (
                       <SelectItem key={role} value={role}>
-                        <div className="flex items-center gap-3">
-                          <div className={`p-1.5 rounded ${info.badgeColor}`}>
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div className="text-right">
-                            <span className="font-medium">{info.name}</span>
-                            <span className="text-muted-foreground mr-2">({info.nameEnglish})</span>
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          <span>{info.name}</span>
                         </div>
                       </SelectItem>
                     );
                   })}
                 </SelectContent>
               </Select>
-              <p className="text-sm text-muted-foreground">
-                {rolesInfo[formData.role].description}
-              </p>
+              {/* Compact Permissions Preview */}
+              <div className="flex items-center gap-2 flex-wrap mt-2">
+                {formData.can_reply_tickets && (
+                  <Badge variant="secondary" className="text-xs gap-1 bg-green-100 text-green-700">
+                    <Ticket className="h-3 w-3" /> التذاكر
+                  </Badge>
+                )}
+                {formData.can_manage_content && (
+                  <Badge variant="secondary" className="text-xs gap-1 bg-blue-100 text-blue-700">
+                    <FileText className="h-3 w-3" /> المحتوى
+                  </Badge>
+                )}
+                {formData.can_attend_meetings && (
+                  <Badge variant="secondary" className="text-xs gap-1 bg-purple-100 text-purple-700">
+                    <Calendar className="h-3 w-3" /> الاجتماعات
+                  </Badge>
+                )}
+              </div>
             </div>
 
-            {/* Personal Info */}
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <Label>الاسم الكامل *</Label>
+            {/* Basic Info - 2 columns */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 space-y-1.5">
+                <Label className="text-sm">الاسم الكامل *</Label>
                 <Input
                   value={formData.full_name}
                   onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  placeholder="أحمد محمد علي"
+                  placeholder="أحمد محمد"
+                  className="h-9"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>البريد الإلكتروني *</Label>
+              <div className="col-span-2 space-y-1.5">
+                <Label className="text-sm">البريد الإلكتروني *</Label>
                 <Input
                   type="email"
                   dir="ltr"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="ahmed@example.com"
+                  placeholder="email@example.com"
                   disabled={!!selectedStaff}
-                  className="text-left"
+                  className="h-9 text-left"
                 />
               </div>
 
               {!selectedStaff && (
-                <div className="space-y-2">
-                  <Label>كلمة المرور *</Label>
+                <div className="col-span-2 space-y-1.5">
+                  <Label className="text-sm">كلمة المرور *</Label>
                   <Input
                     type="password"
                     dir="ltr"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     placeholder="••••••••"
-                    className="text-left"
+                    className="h-9 text-left"
                   />
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Mail className="h-3 w-3" />
-                    سيتم إرسال بيانات الدخول للموظف عبر البريد الإلكتروني
-                  </p>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>رقم الهاتف</Label>
-                  <Input
-                    dir="ltr"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="05xxxxxxxx"
-                    className="text-left"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>المسمى الوظيفي</Label>
-                  <Input
-                    value={formData.job_title}
-                    onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
-                    placeholder="مهندس دعم فني"
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">رقم الهاتف</Label>
+                <Input
+                  dir="ltr"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="05xxxxxxxx"
+                  className="h-9 text-left"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">المسمى الوظيفي</Label>
+                <Input
+                  value={formData.job_title}
+                  onChange={(e) => setFormData({ ...formData, job_title: e.target.value })}
+                  placeholder="مهندس دعم"
+                  className="h-9"
+                />
               </div>
             </div>
 
-            {/* Role Permissions Preview */}
-            <div className="space-y-3 p-4 rounded-lg bg-muted/50">
-              <Label className="text-sm font-medium text-muted-foreground">
-                الصلاحيات حسب الدور المحدد:
-              </Label>
-              <div className="grid grid-cols-3 gap-2">
-                <div className={`flex items-center gap-2 p-2 rounded text-sm ${
-                  formData.can_reply_tickets ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'
-                }`}>
-                  <Ticket className="h-4 w-4" />
-                  <span>التذاكر</span>
-                  {formData.can_reply_tickets && <CheckCircle2 className="h-3 w-3 mr-auto" />}
-                </div>
-                <div className={`flex items-center gap-2 p-2 rounded text-sm ${
-                  formData.can_manage_content ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'
-                }`}>
-                  <FileText className="h-4 w-4" />
-                  <span>المحتوى</span>
-                  {formData.can_manage_content && <CheckCircle2 className="h-3 w-3 mr-auto" />}
-                </div>
-                <div className={`flex items-center gap-2 p-2 rounded text-sm ${
-                  formData.can_attend_meetings ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'
-                }`}>
-                  <Calendar className="h-4 w-4" />
-                  <span>الاجتماعات</span>
-                  {formData.can_attend_meetings && <CheckCircle2 className="h-3 w-3 mr-auto" />}
-                </div>
-              </div>
-            </div>
-
-            {/* Status Toggle */}
-            <div className="flex items-center justify-between p-4 rounded-lg border">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-full ${formData.is_active ? 'bg-green-100' : 'bg-gray-100'}`}>
-                  {formData.is_active ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
-                  ) : (
-                    <Shield className="h-5 w-5 text-gray-400" />
-                  )}
-                </div>
-                <div>
-                  <p className="font-medium">حالة الحساب</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formData.is_active ? 'الحساب نشط ويمكنه تسجيل الدخول' : 'الحساب معطل ولا يمكنه تسجيل الدخول'}
-                  </p>
-                </div>
+            {/* Status Toggle - Compact */}
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className={`h-4 w-4 ${formData.is_active ? 'text-green-600' : 'text-gray-400'}`} />
+                <span className="text-sm font-medium">
+                  {formData.is_active ? 'الحساب نشط' : 'الحساب معطل'}
+                </span>
               </div>
               <Switch
                 checked={formData.is_active}
                 onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
               />
             </div>
+
+            {!selectedStaff && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Mail className="h-3 w-3" />
+                سيتم إرسال بيانات الدخول للموظف عبر البريد
+              </p>
+            )}
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+          {/* Footer - Always Visible */}
+          <DialogFooter className="pt-4 border-t gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDialogOpen(false)} size="sm">
               إلغاء
             </Button>
-            <Button onClick={handleSave} disabled={saving} className="gap-2">
+            <Button onClick={handleSave} disabled={saving} size="sm" className="gap-2 min-w-[120px]">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {selectedStaff ? 'حفظ التعديلات' : 'إضافة الموظف'}
             </Button>
