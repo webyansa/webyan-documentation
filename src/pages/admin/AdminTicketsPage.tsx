@@ -1,25 +1,24 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
-  Ticket, Clock, CheckCircle, AlertCircle, Search, Eye, 
-  MessageSquare, User, UserPlus, Send, Building2, Globe, ExternalLink,
-  MoreHorizontal, RefreshCw, Calendar, Inbox, Star, StarOff,
-  ChevronDown, Filter, X, ArrowRight, Zap, Timer, Hash
+  Ticket, Clock, CheckCircle, AlertCircle, Search, 
+  MessageSquare, User, UserPlus, Send, Building2, 
+  RefreshCw, Calendar, Inbox, ChevronRight, 
+  Filter, X, ArrowUpRight, Hash, Mail, Phone,
+  MoreVertical, Eye, ExternalLink
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -76,22 +75,19 @@ interface StaffMember {
   is_active: boolean;
 }
 
-interface Organization {
-  id: string;
-  name: string;
-}
-
-const statusConfig: Record<string, { label: string; color: string; bgColor: string; borderColor: string; icon: React.ElementType }> = {
-  open: { label: 'جديدة', color: 'text-blue-600', bgColor: 'bg-blue-500', borderColor: 'border-blue-500', icon: Inbox },
-  in_progress: { label: 'قيد العمل', color: 'text-amber-600', bgColor: 'bg-amber-500', borderColor: 'border-amber-500', icon: Clock },
-  resolved: { label: 'محلولة', color: 'text-emerald-600', bgColor: 'bg-emerald-500', borderColor: 'border-emerald-500', icon: CheckCircle },
-  closed: { label: 'مغلقة', color: 'text-slate-500', bgColor: 'bg-slate-400', borderColor: 'border-slate-400', icon: CheckCircle },
+// Status configuration with vibrant colors
+const statusConfig: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+  open: { label: 'جديدة', bg: 'bg-sky-50', text: 'text-sky-700', dot: 'bg-sky-500' },
+  in_progress: { label: 'قيد المعالجة', bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
+  resolved: { label: 'تم الحل', bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  closed: { label: 'مغلقة', bg: 'bg-slate-100', text: 'text-slate-600', dot: 'bg-slate-400' },
 };
 
-const priorityConfig: Record<string, { label: string; color: string; bgColor: string; icon: string }> = {
-  high: { label: 'عاجلة', color: 'text-red-600', bgColor: 'bg-red-500', icon: '🔴' },
-  medium: { label: 'متوسطة', color: 'text-amber-600', bgColor: 'bg-amber-500', icon: '🟡' },
-  low: { label: 'عادية', color: 'text-emerald-600', bgColor: 'bg-emerald-500', icon: '🟢' },
+// Priority configuration
+const priorityConfig: Record<string, { label: string; color: string; bg: string }> = {
+  high: { label: 'عاجلة', color: 'text-rose-600', bg: 'bg-rose-50 border-rose-200' },
+  medium: { label: 'متوسطة', color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
+  low: { label: 'عادية', color: 'text-slate-600', bg: 'bg-slate-50 border-slate-200' },
 };
 
 const categoryLabels: Record<string, string> = {
@@ -110,7 +106,7 @@ function formatSmartDate(dateString: string): string {
   if (isYesterday(date)) {
     return `أمس ${format(date, 'HH:mm')}`;
   }
-  return format(date, 'dd MMM', { locale: ar });
+  return format(date, 'dd/MM/yyyy', { locale: ar });
 }
 
 export default function AdminTicketsPage() {
@@ -118,15 +114,14 @@ export default function AdminTicketsPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
-  const [showFilters, setShowFilters] = useState(false);
   
-  // Selected ticket for detail view
+  // View ticket dialog
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [replies, setReplies] = useState<TicketReply[]>([]);
   const [newReply, setNewReply] = useState('');
@@ -147,7 +142,6 @@ export default function AdminTicketsPage() {
     }
     fetchTickets();
     fetchStaffMembers();
-    fetchOrganizations();
     const cleanup = setupRealtimeSubscription();
     return cleanup;
   }, [isAdminOrEditor, navigate]);
@@ -179,33 +173,11 @@ export default function AdminTicketsPage() {
       );
       
       setTickets(ticketsWithStaff as unknown as SupportTicket[]);
-      
-      // Auto-select first ticket if none selected
-      if (!selectedTicket && ticketsWithStaff.length > 0) {
-        const firstTicket = ticketsWithStaff[0] as unknown as SupportTicket;
-        setSelectedTicket(firstTicket);
-        fetchReplies(firstTicket.id);
-      }
     } catch (error) {
       console.error('Error fetching tickets:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
-    }
-  };
-
-  const fetchOrganizations = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('client_organizations')
-        .select('id, name')
-        .eq('is_active', true)
-        .order('name');
-
-      if (error) throw error;
-      setOrganizations(data || []);
-    } catch (error) {
-      console.error('Error fetching organizations:', error);
     }
   };
 
@@ -245,9 +217,10 @@ export default function AdminTicketsPage() {
     if (!error) setReplies(data || []);
   };
 
-  const handleSelectTicket = async (ticket: SupportTicket) => {
+  const handleViewTicket = async (ticket: SupportTicket) => {
     setSelectedTicket(ticket);
     await fetchReplies(ticket.id);
+    setViewDialogOpen(true);
   };
 
   const getTicketEmail = async (ticket: SupportTicket): Promise<string | null> => {
@@ -291,9 +264,8 @@ export default function AdminTicketsPage() {
         });
       }
 
-      toast({ title: "تم التحديث", description: "تم تغيير حالة التذكرة" });
+      toast({ title: "تم التحديث", description: "تم تغيير حالة التذكرة بنجاح" });
       
-      // Update selected ticket
       if (selectedTicket?.id === ticketId) {
         setSelectedTicket({ ...selectedTicket, status: newStatus });
       }
@@ -350,6 +322,7 @@ export default function AdminTicketsPage() {
     setSelectedStaffId(ticket.assigned_to_staff || '');
     setAdminNote(ticket.admin_note || '');
     setAssignDialogOpen(true);
+    setViewDialogOpen(false);
   };
 
   const handleAssignTicket = async () => {
@@ -386,7 +359,7 @@ export default function AdminTicketsPage() {
         }
       }
 
-      toast({ title: "تم التوجيه", description: "تم توجيه التذكرة للموظف" });
+      toast({ title: "تم التوجيه", description: "تم توجيه التذكرة للموظف بنجاح" });
       setAssignDialogOpen(false);
       fetchTickets(true);
     } catch (error: any) {
@@ -404,16 +377,12 @@ export default function AdminTicketsPage() {
         (ticket.guest_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (ticket.organization?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
       
-      const matchesStatus = activeFilter === 'all' || 
-        (activeFilter === 'active' && (ticket.status === 'open' || ticket.status === 'in_progress')) ||
-        (activeFilter === 'unassigned' && !ticket.assigned_to_staff && ticket.status !== 'resolved' && ticket.status !== 'closed') ||
-        ticket.status === activeFilter;
-      
+      const matchesStatus = statusFilter === 'all' || ticket.status === statusFilter;
       const matchesPriority = priorityFilter === 'all' || ticket.priority === priorityFilter;
       
       return matchesSearch && matchesStatus && matchesPriority;
     });
-  }, [tickets, searchQuery, activeFilter, priorityFilter]);
+  }, [tickets, searchQuery, statusFilter, priorityFilter]);
 
   const stats = useMemo(() => ({
     total: tickets.length,
@@ -421,18 +390,17 @@ export default function AdminTicketsPage() {
     inProgress: tickets.filter(t => t.status === 'in_progress').length,
     resolved: tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length,
     unassigned: tickets.filter(t => !t.assigned_to_staff && t.status !== 'resolved' && t.status !== 'closed').length,
-    highPriority: tickets.filter(t => t.priority === 'high' && t.status !== 'resolved' && t.status !== 'closed').length,
   }), [tickets]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[80vh]">
+      <div className="flex items-center justify-center h-[60vh]">
         <div className="text-center space-y-4">
-          <div className="relative mx-auto w-16 h-16">
-            <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
+          <div className="relative mx-auto w-12 h-12">
+            <div className="absolute inset-0 rounded-full border-4 border-muted" />
             <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
           </div>
-          <p className="text-muted-foreground">جاري تحميل التذاكر...</p>
+          <p className="text-muted-foreground text-sm">جاري تحميل التذاكر...</p>
         </div>
       </div>
     );
@@ -440,528 +408,579 @@ export default function AdminTicketsPage() {
 
   return (
     <TooltipProvider>
-      <div className="h-[calc(100vh-120px)] flex flex-col">
-        {/* Compact Header */}
-        <div className="flex items-center justify-between px-1 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Ticket className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold">التذاكر</h1>
-                <p className="text-xs text-muted-foreground">{stats.total} تذكرة</p>
-              </div>
-            </div>
-            
-            {/* Quick Stats Pills */}
-            <div className="hidden md:flex items-center gap-2">
-              {stats.highPriority > 0 && (
-                <Badge variant="destructive" className="gap-1 animate-pulse">
-                  <Zap className="h-3 w-3" />
-                  {stats.highPriority} عاجلة
-                </Badge>
-              )}
-              {stats.unassigned > 0 && (
-                <Badge variant="secondary" className="gap-1 bg-amber-100 text-amber-700 hover:bg-amber-200">
-                  <AlertCircle className="h-3 w-3" />
-                  {stats.unassigned} بانتظار التوجيه
-                </Badge>
-              )}
-            </div>
+      <div className="space-y-6 p-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">إدارة التذاكر</h1>
+            <p className="text-muted-foreground text-sm mt-1">عرض ومتابعة جميع تذاكر الدعم الفني</p>
           </div>
-          
-          <Button variant="ghost" size="sm" onClick={() => fetchTickets(true)} disabled={refreshing} className="gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => fetchTickets(true)} 
+            disabled={refreshing}
+            className="gap-2"
+          >
             <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-            <span className="hidden sm:inline">تحديث</span>
+            تحديث
           </Button>
         </div>
 
-        {/* Main Content - Split View */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Panel - Ticket List */}
-          <div className="w-full md:w-[380px] lg:w-[420px] border-l flex flex-col bg-muted/20">
-            {/* Search & Filters */}
-            <div className="p-3 space-y-3 border-b bg-background">
-              <div className="relative">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="بحث..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pr-9 h-9 text-sm"
-                />
-                {searchQuery && (
-                  <Button variant="ghost" size="icon" className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7" onClick={() => setSearchQuery('')}>
-                    <X className="h-3 w-3" />
-                  </Button>
-                )}
-              </div>
-
-              {/* Filter Tabs */}
-              <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
-                {[
-                  { key: 'all', label: 'الكل', count: stats.total },
-                  { key: 'open', label: 'جديدة', count: stats.open, color: 'bg-blue-500' },
-                  { key: 'in_progress', label: 'قيد العمل', count: stats.inProgress, color: 'bg-amber-500' },
-                  { key: 'unassigned', label: 'غير موجهة', count: stats.unassigned, color: 'bg-rose-500' },
-                  { key: 'resolved', label: 'محلولة', count: stats.resolved, color: 'bg-emerald-500' },
-                ].map(tab => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveFilter(tab.key)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all",
-                      activeFilter === tab.key 
-                        ? "bg-primary text-primary-foreground shadow-sm" 
-                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                    )}
-                  >
-                    {tab.color && <span className={cn("w-2 h-2 rounded-full", tab.color)} />}
-                    {tab.label}
-                    <span className={cn(
-                      "px-1.5 py-0.5 rounded-full text-[10px]",
-                      activeFilter === tab.key ? "bg-white/20" : "bg-background"
-                    )}>
-                      {tab.count}
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Priority Filter */}
-              <Collapsible open={showFilters} onOpenChange={setShowFilters}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="w-full justify-between h-8 text-xs">
-                    <span className="flex items-center gap-1.5">
-                      <Filter className="h-3 w-3" />
-                      فلاتر إضافية
-                    </span>
-                    <ChevronDown className={cn("h-3 w-3 transition-transform", showFilters && "rotate-180")} />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-2">
-                  <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="الأولوية" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">جميع الأولويات</SelectItem>
-                      <SelectItem value="high">🔴 عاجلة</SelectItem>
-                      <SelectItem value="medium">🟡 متوسطة</SelectItem>
-                      <SelectItem value="low">🟢 عادية</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
-
-            {/* Ticket List */}
-            <ScrollArea className="flex-1">
-              {filteredTickets.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-                  <div className="p-4 rounded-full bg-muted mb-4">
-                    <Inbox className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                  <p className="font-medium mb-1">لا توجد تذاكر</p>
-                  <p className="text-sm text-muted-foreground">لم يتم العثور على تذاكر تطابق البحث</p>
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {filteredTickets.map((ticket) => {
-                    const status = statusConfig[ticket.status] || statusConfig.open;
-                    const priority = priorityConfig[ticket.priority] || priorityConfig.medium;
-                    const isSelected = selectedTicket?.id === ticket.id;
-
-                    return (
-                      <div
-                        key={ticket.id}
-                        onClick={() => handleSelectTicket(ticket)}
-                        className={cn(
-                          "p-3 cursor-pointer transition-all hover:bg-accent/50 relative",
-                          isSelected && "bg-accent border-r-2 border-r-primary"
-                        )}
-                      >
-                        {/* Priority Indicator Line */}
-                        <div className={cn("absolute top-0 right-0 w-1 h-full", priority.bgColor)} />
-                        
-                        <div className="pr-2">
-                          {/* Header Row */}
-                          <div className="flex items-start justify-between gap-2 mb-1.5">
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-                                {ticket.ticket_number}
-                              </span>
-                              <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-5 shrink-0", status.color, `border-${status.borderColor}`)}>
-                                {status.label}
-                              </Badge>
-                            </div>
-                            <span className="text-[10px] text-muted-foreground shrink-0">
-                              {formatSmartDate(ticket.created_at)}
-                            </span>
-                          </div>
-
-                          {/* Subject */}
-                          <h4 className={cn(
-                            "text-sm font-medium truncate mb-1",
-                            isSelected ? "text-primary" : "text-foreground"
-                          )}>
-                            {ticket.subject}
-                          </h4>
-
-                          {/* Description Preview */}
-                          <p className="text-xs text-muted-foreground line-clamp-1 mb-2">
-                            {ticket.description}
-                          </p>
-
-                          {/* Footer */}
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {/* Sender */}
-                              <div className="flex items-center gap-1">
-                                <Avatar className="h-5 w-5">
-                                  <AvatarFallback className="text-[9px] bg-muted">
-                                    {(ticket.guest_name || ticket.organization?.name || 'م')[0]}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="text-[11px] text-muted-foreground truncate max-w-[100px]">
-                                  {ticket.organization?.name || ticket.guest_name || 'مستخدم'}
-                                </span>
-                              </div>
-                              
-                              {/* Category Tag */}
-                              <span className="text-[10px] text-muted-foreground/60 hidden sm:inline">
-                                {categoryLabels[ticket.category] || ticket.category}
-                              </span>
-                            </div>
-
-                            {/* Assigned Staff */}
-                            {ticket.staff ? (
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <Avatar className="h-5 w-5 border border-primary/30">
-                                    <AvatarFallback className="text-[9px] bg-primary/10 text-primary">
-                                      {ticket.staff.full_name[0]}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                </TooltipTrigger>
-                                <TooltipContent>{ticket.staff.full_name}</TooltipContent>
-                              </Tooltip>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground/50">غير موجهة</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </ScrollArea>
-          </div>
-
-          {/* Right Panel - Ticket Detail */}
-          <div className="hidden md:flex flex-1 flex-col bg-background">
-            {selectedTicket ? (
-              <>
-                {/* Detail Header */}
-                <div className="p-4 border-b bg-gradient-to-l from-muted/30 to-transparent">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                          {selectedTicket.ticket_number}
-                        </span>
-                        <Badge className={cn(
-                          "text-xs",
-                          statusConfig[selectedTicket.status]?.bgColor,
-                          "text-white"
-                        )}>
-                          {statusConfig[selectedTicket.status]?.label}
-                        </Badge>
-                        <Badge variant="outline" className={cn("text-xs gap-1", priorityConfig[selectedTicket.priority]?.color)}>
-                          {priorityConfig[selectedTicket.priority]?.icon}
-                          {priorityConfig[selectedTicket.priority]?.label}
-                        </Badge>
-                      </div>
-                      <h2 className="text-lg font-semibold">{selectedTicket.subject}</h2>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Select value={selectedTicket.status} onValueChange={(v) => handleStatusChange(selectedTicket.id, v)}>
-                        <SelectTrigger className="w-32 h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="open">جديدة</SelectItem>
-                          <SelectItem value="in_progress">قيد العمل</SelectItem>
-                          <SelectItem value="resolved">محلولة</SelectItem>
-                          <SelectItem value="closed">مغلقة</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-popover">
-                          <DropdownMenuItem onClick={() => handleOpenAssignDialog(selectedTicket)}>
-                            <UserPlus className="h-4 w-4 ml-2" />
-                            توجيه لموظف
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleStatusChange(selectedTicket.id, 'closed')}>
-                            إغلاق التذكرة
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-
-                  {/* Meta Info Cards */}
-                  <div className="grid grid-cols-3 gap-3">
-                    {/* Sender Card */}
-                    <div className="bg-muted/50 rounded-lg p-2.5">
-                      <div className="text-[10px] text-muted-foreground mb-1">المرسل</div>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">{(selectedTicket.guest_name || 'م')[0]}</AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <div className="text-xs font-medium truncate">{selectedTicket.guest_name || 'مستخدم مسجل'}</div>
-                          {selectedTicket.guest_email && (
-                            <div className="text-[10px] text-muted-foreground truncate">{selectedTicket.guest_email}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Organization Card */}
-                    <div className="bg-muted/50 rounded-lg p-2.5">
-                      <div className="text-[10px] text-muted-foreground mb-1">العميل</div>
-                      {selectedTicket.organization ? (
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 rounded bg-primary/10">
-                            <Building2 className="h-4 w-4 text-primary" />
-                          </div>
-                          <span className="text-xs font-medium truncate">{selectedTicket.organization.name}</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">غير محدد</span>
-                      )}
-                    </div>
-
-                    {/* Assigned Staff Card */}
-                    <div className="bg-muted/50 rounded-lg p-2.5">
-                      <div className="text-[10px] text-muted-foreground mb-1">الموظف المسؤول</div>
-                      {selectedTicket.staff ? (
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-6 w-6 border border-primary/30">
-                            <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                              {selectedTicket.staff.full_name[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs font-medium truncate">{selectedTicket.staff.full_name}</span>
-                        </div>
-                      ) : (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 p-0" onClick={() => handleOpenAssignDialog(selectedTicket)}>
-                          <UserPlus className="h-3 w-3" />
-                          توجيه
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Conversation Area */}
-                <ScrollArea className="flex-1 p-4">
-                  <div className="space-y-4 max-w-2xl">
-                    {/* Original Ticket */}
-                    <div className="bg-muted/30 rounded-xl p-4 border">
-                      <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
-                        <Timer className="h-3 w-3" />
-                        {format(new Date(selectedTicket.created_at), 'dd MMMM yyyy - HH:mm', { locale: ar })}
-                      </div>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedTicket.description}</p>
-                      {(selectedTicket.website_url || selectedTicket.screenshot_url) && (
-                        <div className="flex gap-3 mt-3 pt-3 border-t border-border/50">
-                          {selectedTicket.website_url && (
-                            <a href={selectedTicket.website_url} target="_blank" rel="noopener noreferrer" 
-                               className="text-xs text-primary hover:underline flex items-center gap-1">
-                              <ExternalLink className="h-3 w-3" />
-                              رابط مرفق
-                            </a>
-                          )}
-                          {selectedTicket.screenshot_url && (
-                            <a href={selectedTicket.screenshot_url} target="_blank" rel="noopener noreferrer"
-                               className="text-xs text-primary hover:underline flex items-center gap-1">
-                              <Eye className="h-3 w-3" />
-                              صورة مرفقة
-                            </a>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Replies */}
-                    {replies.map((reply) => (
-                      <div
-                        key={reply.id}
-                        className={cn(
-                          "rounded-xl p-4 max-w-[85%]",
-                          reply.is_staff_reply 
-                            ? "bg-primary/5 border border-primary/10 mr-auto" 
-                            : "bg-muted/50 ml-auto"
-                        )}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <Avatar className="h-5 w-5">
-                            <AvatarFallback className={cn(
-                              "text-[10px]",
-                              reply.is_staff_reply ? "bg-primary/20 text-primary" : "bg-muted"
-                            )}>
-                              {reply.is_staff_reply ? 'د' : 'ع'}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs font-medium">
-                            {reply.is_staff_reply ? 'فريق الدعم' : 'العميل'}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            {formatSmartDate(reply.created_at)}
-                          </span>
-                        </div>
-                        <p className="text-sm leading-relaxed">{reply.message}</p>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-
-                {/* Reply Input */}
-                {selectedTicket.status !== 'closed' && (
-                  <div className="p-4 border-t bg-muted/20">
-                    <div className="flex gap-3">
-                      <Textarea
-                        placeholder="اكتب ردك هنا..."
-                        value={newReply}
-                        onChange={(e) => setNewReply(e.target.value)}
-                        className="min-h-[80px] resize-none text-sm"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                            handleSendReply();
-                          }
-                        }}
-                      />
-                      <div className="flex flex-col gap-2">
-                        <Button onClick={handleSendReply} disabled={!newReply.trim() || sending} className="gap-2">
-                          <Send className="h-4 w-4" />
-                          إرسال
-                        </Button>
-                        <span className="text-[10px] text-muted-foreground text-center">Ctrl+Enter</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center space-y-3">
-                  <div className="p-4 rounded-full bg-muted/50 mx-auto w-fit">
-                    <MessageSquare className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                  <p className="text-muted-foreground">اختر تذكرة لعرض تفاصيلها</p>
-                </div>
-              </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card 
+            className={cn(
+              "cursor-pointer transition-all hover:shadow-md border-2",
+              statusFilter === 'all' ? "border-primary bg-primary/5" : "border-transparent hover:border-muted"
             )}
-          </div>
+            onClick={() => setStatusFilter('all')}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">الإجمالي</p>
+                  <p className="text-2xl font-bold">{stats.total}</p>
+                </div>
+                <div className="p-2.5 rounded-full bg-slate-100">
+                  <Ticket className="h-5 w-5 text-slate-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card 
+            className={cn(
+              "cursor-pointer transition-all hover:shadow-md border-2",
+              statusFilter === 'open' ? "border-sky-500 bg-sky-50" : "border-transparent hover:border-muted"
+            )}
+            onClick={() => setStatusFilter('open')}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">جديدة</p>
+                  <p className="text-2xl font-bold text-sky-700">{stats.open}</p>
+                </div>
+                <div className="p-2.5 rounded-full bg-sky-100">
+                  <Inbox className="h-5 w-5 text-sky-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card 
+            className={cn(
+              "cursor-pointer transition-all hover:shadow-md border-2",
+              statusFilter === 'in_progress' ? "border-amber-500 bg-amber-50" : "border-transparent hover:border-muted"
+            )}
+            onClick={() => setStatusFilter('in_progress')}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">قيد المعالجة</p>
+                  <p className="text-2xl font-bold text-amber-700">{stats.inProgress}</p>
+                </div>
+                <div className="p-2.5 rounded-full bg-amber-100">
+                  <Clock className="h-5 w-5 text-amber-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card 
+            className={cn(
+              "cursor-pointer transition-all hover:shadow-md border-2",
+              statusFilter === 'resolved' ? "border-emerald-500 bg-emerald-50" : "border-transparent hover:border-muted"
+            )}
+            onClick={() => setStatusFilter('resolved')}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">تم الحل</p>
+                  <p className="text-2xl font-bold text-emerald-700">{stats.resolved}</p>
+                </div>
+                <div className="p-2.5 rounded-full bg-emerald-100">
+                  <CheckCircle className="h-5 w-5 text-emerald-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Mobile Detail View Dialog */}
-        <Dialog open={!!selectedTicket && window.innerWidth < 768} onOpenChange={() => setSelectedTicket(null)}>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col p-0">
-            {selectedTicket && (
-              <>
-                <DialogHeader className="p-4 border-b">
-                  <div className="flex items-center gap-2">
-                    <Badge className={cn("text-xs", statusConfig[selectedTicket.status]?.bgColor, "text-white")}>
-                      {statusConfig[selectedTicket.status]?.label}
-                    </Badge>
-                    <span className="font-mono text-xs text-muted-foreground">{selectedTicket.ticket_number}</span>
-                  </div>
-                  <DialogTitle className="text-lg">{selectedTicket.subject}</DialogTitle>
-                </DialogHeader>
-                <ScrollArea className="flex-1 p-4">
-                  <div className="space-y-4">
-                    <div className="bg-muted/30 rounded-lg p-3">
-                      <p className="text-sm whitespace-pre-wrap">{selectedTicket.description}</p>
-                    </div>
-                    {replies.map((reply) => (
-                      <div key={reply.id} className={cn("rounded-lg p-3", reply.is_staff_reply ? "bg-primary/5 border border-primary/10" : "bg-muted/50")}>
-                        <div className="flex items-center gap-2 mb-2 text-xs">
-                          <span className="font-medium">{reply.is_staff_reply ? 'فريق الدعم' : 'العميل'}</span>
-                          <span className="text-muted-foreground">{formatSmartDate(reply.created_at)}</span>
-                        </div>
-                        <p className="text-sm">{reply.message}</p>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-                {selectedTicket.status !== 'closed' && (
-                  <div className="p-4 border-t">
-                    <div className="flex gap-2">
-                      <Textarea placeholder="اكتب ردك..." value={newReply} onChange={(e) => setNewReply(e.target.value)} className="min-h-[60px]" />
-                      <Button onClick={handleSendReply} disabled={!newReply.trim() || sending} size="icon">
-                        <Send className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+        {/* Filters */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="البحث برقم التذكرة، الموضوع، اسم العميل..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-10"
+                />
+                {searchQuery && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="absolute left-1 top-1/2 -translate-y-1/2 h-7 w-7" 
+                    onClick={() => setSearchQuery('')}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 )}
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Assign Staff Dialog */}
-        <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <UserPlus className="h-5 w-5 text-primary" />
-                توجيه التذكرة
-              </DialogTitle>
-              <DialogDescription>اختر الموظف المسؤول</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>الموظف</Label>
-                <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر موظف..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover">
-                    {staffMembers.map((staff) => (
-                      <SelectItem key={staff.id} value={staff.id}>
-                        {staff.full_name} {staff.job_title && `(${staff.job_title})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
-              <div className="space-y-2">
-                <Label>ملاحظة (اختياري)</Label>
-                <Textarea value={adminNote} onChange={(e) => setAdminNote(e.target.value)} placeholder="تعليمات للموظف..." className="min-h-[80px]" />
+              <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="الأولوية" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع الأولويات</SelectItem>
+                  <SelectItem value="high">عاجلة</SelectItem>
+                  <SelectItem value="medium">متوسطة</SelectItem>
+                  <SelectItem value="low">عادية</SelectItem>
+                </SelectContent>
+              </Select>
+              {(statusFilter !== 'all' || priorityFilter !== 'all') && (
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => { setStatusFilter('all'); setPriorityFilter('all'); }}
+                  className="gap-1"
+                >
+                  <X className="h-4 w-4" />
+                  مسح الفلاتر
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tickets List */}
+        {filteredTickets.length === 0 ? (
+          <Card>
+            <CardContent className="py-16">
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <Inbox className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="font-semibold mb-1">لا توجد تذاكر</h3>
+                <p className="text-sm text-muted-foreground">لم يتم العثور على تذاكر تطابق معايير البحث</p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              {/* Table Header */}
+              <div className="hidden md:grid grid-cols-12 gap-4 p-4 bg-muted/50 text-xs font-medium text-muted-foreground border-b">
+                <div className="col-span-1">الرقم</div>
+                <div className="col-span-3">الموضوع</div>
+                <div className="col-span-2">العميل</div>
+                <div className="col-span-1">الأولوية</div>
+                <div className="col-span-2">الحالة</div>
+                <div className="col-span-2">التاريخ</div>
+                <div className="col-span-1">إجراءات</div>
+              </div>
+
+              {/* Table Body */}
+              <div className="divide-y">
+                {filteredTickets.map((ticket) => {
+                  const status = statusConfig[ticket.status] || statusConfig.open;
+                  const priority = priorityConfig[ticket.priority] || priorityConfig.medium;
+
+                  return (
+                    <div
+                      key={ticket.id}
+                      className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 hover:bg-muted/30 transition-colors items-center"
+                    >
+                      {/* Ticket Number */}
+                      <div className="col-span-1">
+                        <span className="inline-flex items-center gap-1 text-xs font-mono bg-muted px-2 py-1 rounded">
+                          <Hash className="h-3 w-3 text-muted-foreground" />
+                          {ticket.ticket_number.slice(-6)}
+                        </span>
+                      </div>
+
+                      {/* Subject */}
+                      <div className="col-span-3">
+                        <button
+                          onClick={() => handleViewTicket(ticket)}
+                          className="text-right hover:text-primary transition-colors"
+                        >
+                          <p className="font-medium text-sm line-clamp-1">{ticket.subject}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                            {ticket.description}
+                          </p>
+                        </button>
+                      </div>
+
+                      {/* Client */}
+                      <div className="col-span-2">
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-7 w-7">
+                            <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+                              {(ticket.organization?.name || ticket.guest_name || 'م')[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {ticket.organization?.name || ticket.guest_name || 'مستخدم'}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground truncate">
+                              {categoryLabels[ticket.category] || ticket.category}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Priority */}
+                      <div className="col-span-1">
+                        <Badge 
+                          variant="outline" 
+                          className={cn("text-[10px] font-medium border", priority.bg, priority.color)}
+                        >
+                          {priority.label}
+                        </Badge>
+                      </div>
+
+                      {/* Status */}
+                      <div className="col-span-2">
+                        <div className="flex items-center gap-3">
+                          <Select 
+                            value={ticket.status} 
+                            onValueChange={(v) => handleStatusChange(ticket.id, v)}
+                          >
+                            <SelectTrigger className={cn(
+                              "h-8 text-xs border-0 gap-2 w-[130px]",
+                              status.bg, status.text
+                            )}>
+                              <span className={cn("w-2 h-2 rounded-full", status.dot)} />
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="open">جديدة</SelectItem>
+                              <SelectItem value="in_progress">قيد المعالجة</SelectItem>
+                              <SelectItem value="resolved">تم الحل</SelectItem>
+                              <SelectItem value="closed">مغلقة</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          
+                          {ticket.staff ? (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Avatar className="h-6 w-6 border-2 border-emerald-200">
+                                  <AvatarFallback className="text-[10px] bg-emerald-50 text-emerald-700">
+                                    {ticket.staff.full_name[0]}
+                                  </AvatarFallback>
+                                </Avatar>
+                              </TooltipTrigger>
+                              <TooltipContent>{ticket.staff.full_name}</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <button 
+                                  onClick={() => handleOpenAssignDialog(ticket)}
+                                  className="h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors"
+                                >
+                                  <UserPlus className="h-3 w-3 text-muted-foreground" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>توجيه لموظف</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Date */}
+                      <div className="col-span-2">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {formatSmartDate(ticket.created_at)}
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="col-span-1">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewTicket(ticket)}>
+                              <Eye className="h-4 w-4 ml-2" />
+                              عرض التفاصيل
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleOpenAssignDialog(ticket)}>
+                              <UserPlus className="h-4 w-4 ml-2" />
+                              توجيه لموظف
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleStatusChange(ticket.id, 'resolved')}>
+                              <CheckCircle className="h-4 w-4 ml-2" />
+                              تعيين كمحلولة
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* View Ticket Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="pb-4 border-b">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline" className="text-xs font-mono">
+                    #{selectedTicket?.ticket_number}
+                  </Badge>
+                  {selectedTicket && (
+                    <>
+                      <Badge className={cn(
+                        "text-xs",
+                        statusConfig[selectedTicket.status]?.bg,
+                        statusConfig[selectedTicket.status]?.text
+                      )}>
+                        {statusConfig[selectedTicket.status]?.label}
+                      </Badge>
+                      <Badge 
+                        variant="outline" 
+                        className={cn(
+                          "text-xs",
+                          priorityConfig[selectedTicket.priority]?.color
+                        )}
+                      >
+                        {priorityConfig[selectedTicket.priority]?.label}
+                      </Badge>
+                    </>
+                  )}
+                </div>
+                <DialogTitle className="text-lg">{selectedTicket?.subject}</DialogTitle>
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>إلغاء</Button>
-              <Button onClick={handleAssignTicket} disabled={!selectedStaffId || assigning}>
-                {assigning ? 'جاري التوجيه...' : 'توجيه'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </DialogHeader>
+
+          {selectedTicket && (
+            <>
+              {/* Info Cards */}
+              <div className="grid grid-cols-2 gap-3 py-4">
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-[10px] text-muted-foreground mb-1">المرسل</p>
+                  <div className="flex items-center gap-2">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-[10px]">
+                        {(selectedTicket.guest_name || 'م')[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">{selectedTicket.guest_name || 'مستخدم'}</p>
+                      {selectedTicket.guest_email && (
+                        <p className="text-[10px] text-muted-foreground">{selectedTicket.guest_email}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <p className="text-[10px] text-muted-foreground mb-1">الموظف المسؤول</p>
+                  {selectedTicket.staff ? (
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-6 w-6 border border-primary/30">
+                        <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+                          {selectedTicket.staff.full_name[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <p className="text-sm font-medium">{selectedTicket.staff.full_name}</p>
+                    </div>
+                  ) : (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-7 text-xs gap-1"
+                      onClick={() => handleOpenAssignDialog(selectedTicket)}
+                    >
+                      <UserPlus className="h-3 w-3" />
+                      توجيه لموظف
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Conversation */}
+              <ScrollArea className="flex-1 -mx-6 px-6">
+                <div className="space-y-4">
+                  {/* Original Message */}
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                      <Calendar className="h-3 w-3" />
+                      {format(new Date(selectedTicket.created_at), 'dd MMMM yyyy - HH:mm', { locale: ar })}
+                    </div>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedTicket.description}</p>
+                    
+                    {(selectedTicket.website_url || selectedTicket.screenshot_url) && (
+                      <div className="mt-3 pt-3 border-t border-slate-200 flex gap-2">
+                        {selectedTicket.website_url && (
+                          <a 
+                            href={selectedTicket.website_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            رابط الصفحة
+                          </a>
+                        )}
+                        {selectedTicket.screenshot_url && (
+                          <a 
+                            href={selectedTicket.screenshot_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            صورة الشاشة
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Replies */}
+                  {replies.map((reply) => (
+                    <div 
+                      key={reply.id} 
+                      className={cn(
+                        "rounded-xl p-4",
+                        reply.is_staff_reply 
+                          ? "bg-primary/5 border border-primary/10 mr-6" 
+                          : "bg-muted/50 border border-muted ml-6"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                        <span className={cn(
+                          "font-medium",
+                          reply.is_staff_reply ? "text-primary" : "text-foreground"
+                        )}>
+                          {reply.is_staff_reply ? 'فريق الدعم' : 'العميل'}
+                        </span>
+                        <span>•</span>
+                        {format(new Date(reply.created_at), 'dd/MM HH:mm', { locale: ar })}
+                      </div>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{reply.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+
+              {/* Reply Input */}
+              {selectedTicket.status !== 'closed' && (
+                <div className="pt-4 border-t mt-4">
+                  <div className="flex gap-2">
+                    <Textarea
+                      placeholder="اكتب ردك هنا..."
+                      value={newReply}
+                      onChange={(e) => setNewReply(e.target.value)}
+                      className="min-h-[80px] resize-none"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.ctrlKey) {
+                          handleSendReply();
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between mt-3">
+                    <p className="text-[10px] text-muted-foreground">Ctrl + Enter للإرسال السريع</p>
+                    <Button onClick={handleSendReply} disabled={!newReply.trim() || sending} className="gap-2">
+                      {sending ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      إرسال الرد
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Staff Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>توجيه التذكرة</DialogTitle>
+            <DialogDescription>
+              اختر موظف الدعم الذي سيتولى معالجة هذه التذكرة
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>الموظف</Label>
+              <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر موظفاً..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {staffMembers.map((staff) => (
+                    <SelectItem key={staff.id} value={staff.id}>
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-5 w-5">
+                          <AvatarFallback className="text-[10px]">{staff.full_name[0]}</AvatarFallback>
+                        </Avatar>
+                        <span>{staff.full_name}</span>
+                        {staff.job_title && (
+                          <span className="text-xs text-muted-foreground">({staff.job_title})</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>ملاحظات للموظف (اختياري)</Label>
+              <Textarea
+                placeholder="أي تعليمات أو ملاحظات خاصة..."
+                value={adminNote}
+                onChange={(e) => setAdminNote(e.target.value)}
+                className="min-h-[80px]"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleAssignTicket} disabled={!selectedStaffId || assigning}>
+              {assigning ? (
+                <RefreshCw className="h-4 w-4 animate-spin ml-2" />
+              ) : (
+                <UserPlus className="h-4 w-4 ml-2" />
+              )}
+              توجيه التذكرة
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
