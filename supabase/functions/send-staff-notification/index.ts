@@ -9,10 +9,11 @@ const corsHeaders = {
 };
 
 interface StaffNotificationRequest {
-  type: 'ticket_assigned' | 'meeting_assigned' | 'new_reply' | 'escalation_alert';
+  type: 'ticket_assigned' | 'meeting_assigned' | 'new_reply' | 'escalation_alert' | 'resend_welcome';
   staff_email: string;
   staff_name: string;
-  data: {
+  job_title?: string;
+  data?: {
     ticket_number?: string;
     ticket_subject?: string;
     meeting_subject?: string;
@@ -25,7 +26,7 @@ interface StaffNotificationRequest {
   };
 }
 
-const getEmailTemplate = (type: string, data: any, staffName: string) => {
+const getEmailTemplate = (type: string, data: any, staffName: string, jobTitle?: string) => {
   const logo = `
     <div style="text-align: center; margin-bottom: 20px;">
       <svg width="120" height="40" viewBox="0 0 120 40" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -105,6 +106,58 @@ const getEmailTemplate = (type: string, data: any, staffName: string) => {
   `;
 
   switch (type) {
+    case 'resend_welcome':
+      return {
+        subject: `🔑 تذكير ببيانات الدخول - نظام ويبيان`,
+        html: `
+          <div style="${baseStyle}">
+            <div style="${containerStyle}">
+              <div style="${headerStyle('#1e3a8a, #3730a3')}">
+                ${iconBadge('🔑', 'rgba(255,255,255,0.2)')}
+                <h1 style="margin: 0; font-size: 26px; font-weight: bold;">تذكير ببيانات الدخول</h1>
+                <p style="margin: 10px 0 0; opacity: 0.9;">نظام ويبيان للدعم الفني</p>
+              </div>
+              
+              <div style="${contentStyle}">
+                <p style="font-size: 18px; color: #1f2937; margin-bottom: 20px;">مرحباً <strong>${staffName}</strong>،</p>
+                <p style="color: #4b5563; line-height: 1.8; font-size: 16px;">
+                  هذا تذكير ببيانات الدخول الخاصة بك للوصول إلى نظام ويبيان.
+                </p>
+                
+                ${jobTitle ? `
+                <div style="${infoBoxStyle('#3b82f6', '#eff6ff')}">
+                  <p style="margin: 0; color: #1e40af;"><strong>المنصب:</strong> ${jobTitle}</p>
+                </div>
+                ` : ''}
+                
+                <div style="${alertBoxStyle}">
+                  <p style="margin: 0 0 8px; color: #92400e; font-weight: bold; font-size: 14px;">⚠️ ملاحظة هامة:</p>
+                  <p style="margin: 0; color: #78350f; font-size: 15px; line-height: 1.6;">
+                    إذا نسيت كلمة المرور، يمكنك استخدام خيار "نسيت كلمة المرور" في صفحة تسجيل الدخول لإعادة تعيينها.
+                  </p>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="https://help.webyan.net/support/login" style="${buttonStyle('#1e3a8a, #3730a3')}">
+                    🔐 الدخول للنظام
+                  </a>
+                </div>
+                
+                <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+                  إذا كانت لديك أي استفسارات، تواصل مع مسؤول النظام.
+                </p>
+              </div>
+              
+              <div style="${footerStyle}">
+                ${logo}
+                <p style="margin: 10px 0 0; font-size: 14px; opacity: 0.9;">نظام إدارة الدعم الفني - ويبيان</p>
+                <p style="margin: 5px 0 0; font-size: 12px; opacity: 0.7;">support@webyan.net</p>
+              </div>
+            </div>
+          </div>
+        `
+      };
+
     case 'ticket_assigned':
       return {
         subject: `🎫 تذكرة جديدة موجهة إليك: ${data.ticket_number}`,
@@ -343,11 +396,11 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { type, staff_email, staff_name, data }: StaffNotificationRequest = await req.json();
+    const { type, staff_email, staff_name, job_title, data }: StaffNotificationRequest = await req.json();
 
     console.log('Sending staff notification:', { type, staff_email, staff_name });
 
-    const emailContent = getEmailTemplate(type, data, staff_name);
+    const emailContent = getEmailTemplate(type, data || {}, staff_name, job_title);
 
     const emailResponse = await resend.emails.send({
       from: "ويبيان <support@webyan.net>",
