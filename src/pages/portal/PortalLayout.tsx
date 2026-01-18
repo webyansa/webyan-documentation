@@ -58,7 +58,7 @@ const subscriptionStatusLabels: Record<
 const PORTAL_GUARD_TIMEOUT_MS = 5000;
 
 const PortalLayout = () => {
-  const { user, signOut, authStatus } = useAuth();
+  const { user, signOut, authStatus, authError } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
@@ -66,31 +66,13 @@ const PortalLayout = () => {
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadNotifications] = useState(0);
-  const [guardTimedOut, setGuardTimedOut] = useState(false);
-
-  // Guard timeout: never allow infinite loaders on protected portal routes
-  useEffect(() => {
-    if (authStatus !== 'unknown') {
-      setGuardTimedOut(false);
-      return;
-    }
-    const id = window.setTimeout(() => setGuardTimedOut(true), PORTAL_GUARD_TIMEOUT_MS);
-    return () => window.clearTimeout(id);
-  }, [authStatus]);
 
   // Route guard: unauthenticated -> portal login (with returnUrl)
   useEffect(() => {
+    if (authStatus !== 'unauthenticated') return;
     const returnUrl = encodeURIComponent(location.pathname + location.search);
-
-    if (authStatus === 'unauthenticated') {
-      navigate(`/portal/login?returnUrl=${returnUrl}`, { replace: true });
-      return;
-    }
-
-    if (authStatus === 'unknown' && guardTimedOut) {
-      navigate(`/portal/login?returnUrl=${returnUrl}&reason=timeout`, { replace: true });
-    }
-  }, [authStatus, guardTimedOut, location.pathname, location.search, navigate]);
+    navigate(`/portal/login?returnUrl=${returnUrl}`, { replace: true });
+  }, [authStatus, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     const uid = user?.id;
@@ -211,6 +193,32 @@ const PortalLayout = () => {
     if (exact) return location.pathname === path;
     return location.pathname.startsWith(path);
   };
+
+  if (authStatus === 'error') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background" dir="rtl">
+        <div className="flex flex-col items-center gap-4 text-center p-6">
+          <Loader2 className="h-10 w-10 text-destructive" />
+          <div className="space-y-1">
+            <p className="font-medium text-foreground">تعذر التحقق من الجلسة</p>
+            <p className="text-sm text-muted-foreground">
+              {authError === 'timeout'
+                ? 'انتهت مهلة التحقق. أعد المحاولة مرة أخرى.'
+                : 'حدث خطأ أثناء التحقق. أعد تحميل الصفحة أو سجّل الدخول من جديد.'}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <Button onClick={() => window.location.reload()} className="w-full sm:w-auto">
+              إعادة المحاولة
+            </Button>
+            <Button variant="outline" onClick={handleSignOut} className="w-full sm:w-auto">
+              تسجيل الخروج
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Protected routes: show loader only while truly checking
   if (authStatus === 'unknown') {

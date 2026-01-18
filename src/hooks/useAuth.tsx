@@ -42,79 +42,99 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const [roleLoading, setRoleLoading] = useState(false);
   const [roleResolvedForUserId, setRoleResolvedForUserId] = useState<string | null>(null);
+  const roleResolvedForUserIdRef = useRef<string | null>(null);
 
   const lastUserRef = useRef<User | null>(null);
   const roleFetchInFlightRef = useRef<Promise<void> | null>(null);
   const roleFetchUserIdRef = useRef<string | null>(null);
 
-  const fetchUserRole = useCallback(
-    async (userId: string, opts?: { silent?: boolean }) => {
-      const silent = opts?.silent ?? false;
+  const fetchUserRole = useCallback(async (userId: string, opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
 
-      // Deduplicate concurrent requests for the same user.
-      if (roleFetchInFlightRef.current && roleFetchUserIdRef.current === userId) {
-        return roleFetchInFlightRef.current;
-      }
+    // Deduplicate concurrent requests for the same user.
+    if (roleFetchInFlightRef.current && roleFetchUserIdRef.current === userId) {
+      return roleFetchInFlightRef.current;
+    }
 
-      roleFetchUserIdRef.current = userId;
+    roleFetchUserIdRef.current = userId;
 
-      const promise = (async () => {
-        const isFirstResolveForUser = roleResolvedForUserId !== userId;
-        const shouldShowLoading = !silent && isFirstResolveForUser;
-        if (shouldShowLoading) setRoleLoading(true);
+    const promise = (async () => {
+      const isFirstResolveForUser = roleResolvedForUserIdRef.current !== userId;
+      const shouldShowLoading = !silent && isFirstResolveForUser;
+      if (shouldShowLoading) setRoleLoading(true);
 
-        try {
-          // NOTE: user may have multiple roles (multiple rows). We pick the highest privilege.
-          const rolePriority: AppRole[] = ['admin', 'editor', 'support_agent', 'client'];
+      try {
+        // NOTE: user may have multiple roles (multiple rows). We pick the highest privilege.
+        const rolePriority: AppRole[] = ['admin', 'editor', 'support_agent', 'client'];
 
-          const { data, error } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', userId);
+        const resolveViaRpc = async (): Promise<AppRole | null> => {
+          const { data: userTypeData, error: userTypeError } = await supabase.rpc('get_user_type', {
+            _user_id: userId,
+          });
 
-          if (error) {
-            // Fallback to backend role resolution (avoids RLS / multi-row issues)
-            console.error('Error fetching user role:', error);
+          if (userTypeError) throw userTypeError;
 
-            const { data: userTypeData, error: userTypeError } = await supabase.rpc('get_user_type', {
-              _user_id: userId,
-            });
+          const roleName = (userTypeData?.[0]?.role_name as AppRole | undefined) ?? null;
+          return roleName && rolePriority.includes(roleName) ? roleName : null;
+        };
 
-            if (userTypeError) {
-              console.error('Error fetching user role (fallback):', userTypeError);
-              if (isFirstResolveForUser) setRole(null);
-              return;
-            }
+        const { data, error } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId);
 
-            const roleName = (userTypeData?.[0]?.role_name as AppRole | undefined) ?? null;
-            setRole(rolePriority.includes(roleName as AppRole) ? (roleName as AppRole) : null);
-            return;
-          }
+        let bestRole: AppRole | null = null;
 
+        if (error) {
+          // Fallback to backend role resolution (avoids RLS / multi-row issues)
+          console.warn('user_roles select failed; falling back to get_user_type()', error);
+          bestRole = await resolveViaRpc();
+        } else {
           const roles = ((data ?? [])
             .map((r: any) => r?.role)
             .filter(Boolean) as AppRole[]);
 
-          const bestRole = rolePriority.find((r) => roles.includes(r)) ?? null;
-          setRole(bestRole);
-        } catch (error) {
-          console.error('Error fetching user role:', error);
-          if (isFirstResolveForUser) setRole(null);
-        } finally {
-          setRoleResolvedForUserId(userId);
-          setRoleLoading(false);
+          if (roles.length === 0) {
+            // IMPORTANT: some RLS setups return empty rows without an error.
+            bestRole = await resolveViaRpc();
+          } else {
+            bestRole = rolePriority.find((r) => roles.includes(r)) ?? null;
+          }
         }
-      })();
 
-      roleFetchInFlightRef.current = promise;
-      promise.finally(() => {
-        if (roleFetchInFlightRef.current === promise) roleFetchInFlightRef.current = null;
-      });
+        setRole(bestRole);
 
-      return promise;
-    },
-    [roleResolvedForUserId]
-  );
+        // Mark role resolution done for this user (even if role is null).
+        setRoleResolvedForUserId(userId);
+        roleResolvedForUserIdRef.current = userId;
+
+        // If we were in an error state due to a previous role-check failure, recover.
+        if (lastUserRef.current?.id === userId) {
+          setAuthError(null);
+          setAuthStatus('authenticated');
+        }
+      } catch (error: any) {
+        console.error('Error resolving user role:', error);
+
+        // Do NOT treat this as "unauthorized" — it's a verification failure.
+        if (lastUserRef.current?.id === userId) {
+          setAuthStatus('error');
+          setAuthError(error?.message || 'role_error');
+        }
+
+        if (isFirstResolveForUser) setRole(null);
+      } finally {
+        setRoleLoading(false);
+      }
+    })();
+
+    roleFetchInFlightRef.current = promise;
+    promise.finally(() => {
+      if (roleFetchInFlightRef.current === promise) roleFetchInFlightRef.current = null;
+    });
+
+    return promise;
+  }, []);
 
   const logActivity = useCallback(
     async (userId: string, email: string, actionType: string, actionDetails?: string) => {
@@ -145,11 +165,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const bootstrapTimeoutId = window.setTimeout(() => {
       if (!mounted) return;
+      // Timeout means: we could not verify session yet. Do NOT mark the user as unauthorized.
       setAuthError('timeout');
-      setAuthStatus('unauthenticated');
+      setAuthStatus('error');
       setSession(null);
       setUser(null);
       setRole(null);
+      setRoleResolvedForUserId(null);
+      roleResolvedForUserIdRef.current = null;
       setAuthBootstrapLoading(false);
       setRoleLoading(false);
     }, BOOTSTRAP_TIMEOUT_MS);
@@ -186,10 +209,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (newSession?.user) {
         setTimeout(() => {
-          if (mounted) fetchUserRole(newSession.user.id);
+          if (mounted) fetchUserRole(newSession.user.id, { silent: true });
         }, 0);
       } else {
         setRole(null);
+        setRoleResolvedForUserId(null);
+        roleResolvedForUserIdRef.current = null;
         setRoleLoading(false);
       }
 
@@ -210,6 +235,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSession(null);
           setUser(null);
           setRole(null);
+          setRoleResolvedForUserId(null);
+          roleResolvedForUserIdRef.current = null;
           setAuthBootstrapLoading(false);
           setRoleLoading(false);
           return;
@@ -223,7 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (existingSession?.user) {
           // safe outside onAuthStateChange callback; still defer for UI responsiveness
           setTimeout(() => {
-            if (mounted) fetchUserRole(existingSession.user.id);
+            if (mounted) fetchUserRole(existingSession.user.id, { silent: true });
           }, 0);
         } else {
           setRoleLoading(false);
@@ -239,6 +266,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         setUser(null);
         setRole(null);
+        setRoleResolvedForUserId(null);
+        roleResolvedForUserIdRef.current = null;
         setAuthBootstrapLoading(false);
         setRoleLoading(false);
       });
@@ -298,15 +327,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     lastUserRef.current = null;
 
     setRole(null);
+    setRoleResolvedForUserId(null);
+    roleResolvedForUserIdRef.current = null;
     setAuthBootstrapLoading(false);
     setRoleLoading(false);
 
     try {
       await Promise.race([
         supabase.auth.signOut(),
-        new Promise((_, reject) =>
-          window.setTimeout(() => reject(new Error('timeout')), 3000)
-        ),
+        new Promise((_, reject) => window.setTimeout(() => reject(new Error('timeout')), 3000)),
       ]);
     } catch {
       // Even if signOut request times out, we keep the UI logged out.
@@ -318,8 +347,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isSupportAgent = role === 'support_agent';
   const isAdminOrEditor = isAdmin || isEditor;
 
-  // Combined loading (legacy behavior): wait for BOTH bootstrap + role
-  const isFullyLoaded = !authBootstrapLoading && !roleLoading;
+  const roleReady =
+    authStatus !== 'authenticated' || !user?.id || roleResolvedForUserId === user.id;
+
+  // Combined loading: wait for bootstrap + role resolution (only when authenticated)
+  const isFullyLoaded = !authBootstrapLoading && !roleLoading && roleReady;
 
   return (
     <AuthContext.Provider

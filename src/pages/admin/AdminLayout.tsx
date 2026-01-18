@@ -153,32 +153,59 @@ const settingsSection: NavSection = {
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, role, loading, signOut, isAdminOrEditor } = useAuth();
+  const { user, role, loading, authStatus, authError, signOut, isAdminOrEditor } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
-    // Only redirect when loading is complete
-    if (!loading) {
-      if (!user) {
-        navigate('/admin/login');
-      } else if (!isAdminOrEditor) {
-        // User is logged in but not admin/editor - redirect to unauthorized page
-        navigate('/unauthorized?portal=admin&returnUrl=/admin', { replace: true });
-      }
+    // Never redirect based on partial/unknown state.
+    if (authStatus === 'unauthenticated') {
+      navigate('/admin/login', { replace: true });
+      return;
     }
-  }, [user, loading, isAdminOrEditor, navigate]);
+
+    // Only decide "unauthorized" after we are fully done checking.
+    if (authStatus === 'authenticated' && !loading && user && !isAdminOrEditor) {
+      navigate('/unauthorized?portal=admin&returnUrl=/admin', { replace: true });
+    }
+  }, [authStatus, loading, user, isAdminOrEditor, navigate]);
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/admin/login');
+    navigate('/admin/login', { replace: true });
   };
 
   // Get current user's permissions
   const currentRole = role as AppRole | null;
   const permissions = currentRole ? rolePermissions[currentRole] : null;
 
+  if (authStatus === 'error') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background" dir="rtl">
+        <div className="flex flex-col items-center gap-4 text-center p-6">
+          <AlertTriangle className="h-10 w-10 text-destructive" />
+          <div className="space-y-1">
+            <p className="font-medium text-foreground">تعذر التحقق من الجلسة أو الصلاحيات</p>
+            <p className="text-sm text-muted-foreground">
+              {authError === 'timeout'
+                ? 'انتهت مهلة التحقق. أعد المحاولة مرة أخرى.'
+                : 'حدث خطأ أثناء التحقق. أعد تحميل الصفحة أو سجّل الدخول من جديد.'}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <Button onClick={() => window.location.reload()} className="w-full sm:w-auto">
+              إعادة المحاولة
+            </Button>
+            <Button variant="outline" onClick={handleSignOut} className="w-full sm:w-auto">
+              تسجيل الخروج
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Show loading while auth is being checked
-  if (loading) {
+  if (authStatus === 'unknown' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -188,6 +215,9 @@ export default function AdminLayout() {
       </div>
     );
   }
+
+  // Redirect is handled by the guard above
+  if (authStatus !== 'authenticated') return null;
 
   // Don't render until we confirm user has access
   if (!user || !isAdminOrEditor) {
