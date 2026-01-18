@@ -80,7 +80,19 @@ import StaffMeetings from "./pages/staff/StaffMeetings";
 import StaffContent from "./pages/staff/StaffContent";
 import StaffChatPage from "./pages/staff/StaffChatPage";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Disable automatic refetch on window focus to prevent data reload
+      // when user switches tabs and returns - this preserves bfcache behavior
+      refetchOnWindowFocus: false,
+      // Keep data fresh but don't refetch on reconnect automatically
+      refetchOnReconnect: false,
+      // Keep stale data longer to prevent unnecessary refetches
+      staleTime: 1000 * 60 * 5, // 5 minutes
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

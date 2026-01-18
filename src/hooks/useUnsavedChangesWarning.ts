@@ -6,9 +6,16 @@ interface UseUnsavedChangesWarningOptions {
   onSaveDraft?: () => void;
 }
 
+/**
+ * This hook automatically saves drafts when the page is hidden (tab switch, minimize, navigate away).
+ * 
+ * IMPORTANT: We intentionally do NOT use `beforeunload` event because:
+ * - It prevents the browser's back/forward cache (bfcache) from working
+ * - This causes the page to fully reload when the user returns to the tab
+ * - Instead, we rely on automatic draft saving + restoration for data persistence
+ */
 export function useUnsavedChangesWarning({
   isDirty,
-  message = 'لديك تغييرات غير محفوظة. هل تريد المغادرة؟',
   onSaveDraft,
 }: UseUnsavedChangesWarningOptions) {
   const shouldBlockRef = useRef(isDirty);
@@ -17,20 +24,21 @@ export function useUnsavedChangesWarning({
   const onSaveDraftRef = useRef(onSaveDraft);
   onSaveDraftRef.current = onSaveDraft;
 
-  const messageRef = useRef(message);
-  messageRef.current = message;
-
   // Save a draft when the page is backgrounded/hidden (does NOT block bfcache)
   useEffect(() => {
     if (!isDirty) return;
 
     const save = () => onSaveDraftRef.current?.();
+    
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         save();
       }
     };
 
+    // pagehide fires reliably when navigating away or closing
+    // visibilitychange fires when switching tabs
+    // Neither blocks bfcache
     window.addEventListener('pagehide', save);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
@@ -40,24 +48,10 @@ export function useUnsavedChangesWarning({
     };
   }, [isDirty]);
 
-  // IMPORTANT: we only attach beforeunload when dirty.
-  // Attaching it permanently can disable the browser back/forward cache and make pages feel like they "refresh".
-  useEffect(() => {
-    if (!isDirty) return;
-
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      onSaveDraftRef.current?.();
-      event.preventDefault();
-      event.returnValue = messageRef.current;
-      return messageRef.current;
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isDirty]);
+  // NO beforeunload - this is intentional to preserve bfcache
+  // Data is saved via pagehide/visibilitychange and restored on return
 
   return {
     isDirty: shouldBlockRef.current,
   };
 }
-
