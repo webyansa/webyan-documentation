@@ -2,7 +2,7 @@ import { useState, useEffect, createContext, useContext, ReactNode, useCallback,
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-type AppRole = 'admin' | 'editor' | 'support_agent' | 'viewer';
+type AppRole = 'admin' | 'editor' | 'support_agent' | 'client';
 export type AuthStatus = 'unknown' | 'authenticated' | 'unauthenticated' | 'error';
 
 interface AuthContextType {
@@ -35,33 +35,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authBootstrapLoading, setAuthBootstrapLoading] = useState(true);
 
-  // role state (may be slower)
-  const [roleLoading, setRoleLoading] = useState(true);
+  /**
+   * Role resolution:
+   * - We only "block" the UI the FIRST time we resolve the role for the current user.
+   * - Subsequent token refreshes / tab switching should NOT bring back a full-screen loader.
+   */
+  const [roleLoading, setRoleLoading] = useState(false);
+  const [roleResolvedForUserId, setRoleResolvedForUserId] = useState<string | null>(null);
 
   const lastUserRef = useRef<User | null>(null);
+  const roleFetchInFlightRef = useRef<Promise<void> | null>(null);
+  const roleFetchUserIdRef = useRef<string | null>(null);
 
-  const fetchUserRole = useCallback(async (userId: string) => {
-    try {
-      setRoleLoading(true);
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .maybeSingle();
+  const fetchUserRole = useCallback(
+    async (userId: string, opts?: { silent?: boolean }) => {
+      const silent = opts?.silent ?? false;
 
-      if (error) {
-        console.error('Error fetching user role:', error);
-        setRole(null);
-      } else {
-        setRole(data?.role as AppRole | null);
+      // Deduplicate concurrent requests for the same user.
+      if (roleFetchInFlightRef.current && roleFetchUserIdRef.current === userId) {
+        return roleFetchInFlightRef.current;
       }
-    } catch (error) {
-      console.error('Error fetching user role:', error);
-      setRole(null);
-    } finally {
-      setRoleLoading(false);
-    }
-  }, []);
+
+      roleFetchUserIdRef.current = userId;
+
+      const promise = (async () => {
+        const isFirstResolveForUser = roleResolvedForUserId !== userId;
+        const shouldShowLoading = !silent && isFirstResolveForUser;
+        if (shouldShowLoading) setRoleLoading(true);
+
+        try {
+          const { data, error } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (error) {
+            console.error('Error fetching user role:', error);
+            if (isFirstResolveForUser) setRole(null);
+            return;
+          }
+
+          setRole((data?.role as AppRole | null) ?? null);
+        } catch (error) {
+          console.error('Error fetching user role:', error);
+          if (isFirstResolveForUser) setRole(null);
+        } finally {
+          setRoleResolvedForUserId(userId);
+          setRoleLoading(false);
+        }
+      })();
+
+      roleFetchInFlightRef.current = promise;
+      promise.finally(() => {
+        if (roleFetchInFlightRef.current === promise) roleFetchInFlightRef.current = null;
+      });
+
+      return promise;
+    },
+    [roleResolvedForUserId]
+  );
 
   const logActivity = useCallback(
     async (userId: string, email: string, actionType: string, actionDetails?: string) => {
