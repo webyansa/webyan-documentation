@@ -2,6 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useDraftPersistence } from '@/hooks/useDraftPersistence';
+import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning';
+import { DraftRestoreDialog } from '@/components/ui/draft-restore-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,12 +30,16 @@ import {
   RefreshCw,
   Copy,
   Check,
-  Link as LinkIcon
+  Link as LinkIcon,
+  CloudOff,
+  Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import RichTextEditor from '@/components/editor/RichTextEditor';
 import { generateSlug } from '@/lib/slugify';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 // Validation schema - simplified
 const articleSchema = z.object({
@@ -93,7 +100,32 @@ export default function ArticleEditorPage() {
   const { user } = useAuth();
   const isEditing = id && id !== 'new';
   
-  const [formData, setFormData] = useState<ArticleFormData>(initialFormData);
+  // Draft persistence
+  const {
+    data: formData,
+    setData: setFormData,
+    isDirty,
+    hasDraft,
+    draftTimestamp,
+    showRestorePrompt,
+    restoreDraft,
+    discardDraft,
+    clearDraft,
+    saveDraftNow,
+    resetWithData,
+  } = useDraftPersistence<ArticleFormData>(initialFormData, {
+    key: 'article',
+    entityId: isEditing ? id : null,
+    debounceMs: 500,
+  });
+
+  // Warn before leaving with unsaved changes
+  useUnsavedChangesWarning({
+    isDirty,
+    message: 'لديك تغييرات غير محفوظة في المقال',
+    onSaveDraft: saveDraftNow,
+  });
+  
   const [modules, setModules] = useState<Module[]>([]);
   const [existingSlugs, setExistingSlugs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,7 +219,7 @@ export default function ArticleEditorPage() {
       if (error) throw error;
 
       if (data) {
-        setFormData({
+        const loadedData: ArticleFormData = {
           title: data.title || '',
           slug: data.slug || '',
           submodule_id: data.submodule_id || '',
@@ -197,7 +229,10 @@ export default function ArticleEditorPage() {
           content: data.content || '',
           warnings: data.warnings || [],
           notes: data.notes || [],
-        });
+        };
+        
+        // Reset with server data but don't clear draft (user might have newer changes)
+        resetWithData(loadedData);
         // Mark slug as manually edited if article exists
         setSlugManuallyEdited(true);
       }
@@ -210,19 +245,16 @@ export default function ArticleEditorPage() {
 
   // Auto-generate slug from title
   const handleTitleChange = (value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      title: value,
-    }));
-    
-    // Only auto-generate if not manually edited
-    if (!slugManuallyEdited) {
-      const newSlug = generateSlug(value);
-      setFormData(prev => ({
-        ...prev,
-        slug: newSlug,
-      }));
-    }
+    setFormData(prev => {
+      const updated = { ...prev, title: value };
+      
+      // Only auto-generate if not manually edited
+      if (!slugManuallyEdited) {
+        updated.slug = generateSlug(value);
+      }
+      
+      return updated;
+    });
     
     if (errors.title) {
       setErrors(prev => ({ ...prev, title: '' }));
@@ -389,6 +421,9 @@ export default function ArticleEditorPage() {
         
         toast.success(publish ? 'تم نشر المقال بنجاح' : 'تم تحديث المقال بنجاح');
         
+        // Clear draft after successful save
+        clearDraft();
+        
         // Stay on edit page
         if (data?.id) {
           navigate(`/admin/articles/${data.id}/edit`, { replace: true });
@@ -406,6 +441,9 @@ export default function ArticleEditorPage() {
         }
         
         toast.success(publish ? 'تم إنشاء ونشر المقال بنجاح' : 'تم إنشاء المقال بنجاح');
+        
+        // Clear draft after successful save
+        clearDraft();
         
         // Redirect to edit page of new article
         if (data?.id) {
@@ -485,6 +523,15 @@ export default function ArticleEditorPage() {
 
   return (
     <div className="space-y-6">
+      {/* Draft Restore Dialog */}
+      <DraftRestoreDialog
+        open={showRestorePrompt}
+        onRestore={restoreDraft}
+        onDiscard={discardDraft}
+        draftTimestamp={draftTimestamp}
+        entityType="مقال"
+      />
+      
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
@@ -495,9 +542,24 @@ export default function ArticleEditorPage() {
             <h1 className="text-2xl font-bold">
               {isEditing ? 'تعديل المقال' : 'مقال جديد'}
             </h1>
-            <p className="text-muted-foreground">
-              {isEditing ? 'تعديل محتوى المقال' : 'إنشاء مقال جديد في دليل الاستخدام'}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-muted-foreground">
+                {isEditing ? 'تعديل محتوى المقال' : 'إنشاء مقال جديد في دليل الاستخدام'}
+              </p>
+              {/* Draft Status Indicator */}
+              {isDirty && (
+                <Badge variant="outline" className="text-xs gap-1 text-yellow-600 border-yellow-300 bg-yellow-50">
+                  <CloudOff className="h-3 w-3" />
+                  تغييرات غير محفوظة
+                </Badge>
+              )}
+              {hasDraft && draftTimestamp && !isDirty && (
+                <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-300 bg-blue-50">
+                  <Clock className="h-3 w-3" />
+                  محفوظ محلياً {format(draftTimestamp, 'HH:mm', { locale: ar })}
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
