@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useRouteState } from '@/hooks/useRouteState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -62,19 +63,29 @@ interface Article {
   } | null;
 }
 
+interface PageState {
+  searchQuery: string;
+  statusFilter: string;
+}
+
 export default function ArticlesPage() {
   const { isAdmin } = useAuth();
+  
+  // Persist filters and search state
+  const { state: pageState, setState: setPageState } = useRouteState<PageState>(
+    { searchQuery: '', statusFilter: 'all' },
+    { key: 'articles-list', persistScroll: true }
+  );
+  
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchArticles();
-  }, [statusFilter]);
+  }, [pageState.statusFilter]);
 
   const fetchArticles = async () => {
     setLoading(true);
@@ -98,8 +109,8 @@ export default function ArticlesPage() {
         `)
         .order('updated_at', { ascending: false });
 
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter as 'draft' | 'published' | 'archived');
+      if (pageState.statusFilter !== 'all') {
+        query = query.eq('status', pageState.statusFilter as 'draft' | 'published' | 'archived');
       }
 
       const { data, error } = await query;
@@ -166,7 +177,7 @@ export default function ArticlesPage() {
   };
 
   const filteredArticles = articles.filter((article) =>
-    article.title.toLowerCase().includes(searchQuery.toLowerCase())
+    article.title.toLowerCase().includes(pageState.searchQuery.toLowerCase())
   );
 
   const getStatusBadge = (status: string) => {
@@ -234,12 +245,15 @@ export default function ArticlesPage() {
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="ابحث في المقالات..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={pageState.searchQuery}
+                onChange={(e) => setPageState({ searchQuery: e.target.value })}
                 className="pr-10"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select 
+              value={pageState.statusFilter} 
+              onValueChange={(value) => setPageState({ statusFilter: value })}
+            >
               <SelectTrigger className="w-full sm:w-40">
                 <SelectValue placeholder="الحالة" />
               </SelectTrigger>
