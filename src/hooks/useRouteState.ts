@@ -56,7 +56,7 @@ export function useRouteState<T extends Record<string, any>>(
           if (parsed.scrollPosition > 0) {
             // Delay scroll restoration to allow DOM to render
             setTimeout(() => {
-              window.scrollTo({ top: parsed.scrollPosition, behavior: 'instant' });
+              window.scrollTo({ top: parsed.scrollPosition, behavior: 'auto' });
             }, 100);
           }
         }
@@ -66,7 +66,7 @@ export function useRouteState<T extends Record<string, any>>(
       scrollRestoredRef.current = true;
     }
   }, [key, location.pathname, persistScroll]);
-  
+
   // Save state and scroll position before leaving
   const saveState = useCallback(() => {
     try {
@@ -81,14 +81,25 @@ export function useRouteState<T extends Record<string, any>>(
       console.error('Error saving route state:', error);
     }
   }, [key, location.pathname]);
-  
-  // Save on unmount or before navigation
+
+  // IMPORTANT:
+  // - Avoid beforeunload handlers here because they often disable the browser's back/forward cache (bfcache)
+  //   which makes pages feel like they "refresh" when the user leaves and comes back.
+  // - pagehide/visibilitychange keep bfcache working while still letting us persist state.
   useEffect(() => {
-    const handleBeforeUnload = () => saveState();
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
+    const handlePageHide = () => saveState();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        saveState();
+      }
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       saveState();
     };
   }, [saveState]);

@@ -1,5 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
-import { useBeforeUnload } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
 
 interface UseUnsavedChangesWarningOptions {
   isDirty: boolean;
@@ -14,41 +13,51 @@ export function useUnsavedChangesWarning({
 }: UseUnsavedChangesWarningOptions) {
   const shouldBlockRef = useRef(isDirty);
   shouldBlockRef.current = isDirty;
+
   const onSaveDraftRef = useRef(onSaveDraft);
   onSaveDraftRef.current = onSaveDraft;
 
-  // Block browser close/refresh using React Router's useBeforeUnload
-  useBeforeUnload(
-    useCallback(
-      (event: BeforeUnloadEvent) => {
-        if (shouldBlockRef.current) {
-          // Save draft before unload
-          onSaveDraftRef.current?.();
-          event.preventDefault();
-          event.returnValue = message;
-          return message;
-        }
-      },
-      [message]
-    )
-  );
+  const messageRef = useRef(message);
+  messageRef.current = message;
 
-  // Also handle regular beforeunload for non-React Router navigation
+  // Save a draft when the page is backgrounded/hidden (does NOT block bfcache)
   useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (shouldBlockRef.current) {
-        onSaveDraftRef.current?.();
-        event.preventDefault();
-        event.returnValue = message;
-        return message;
+    if (!isDirty) return;
+
+    const save = () => onSaveDraftRef.current?.();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        save();
       }
+    };
+
+    window.addEventListener('pagehide', save);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pagehide', save);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isDirty]);
+
+  // IMPORTANT: we only attach beforeunload when dirty.
+  // Attaching it permanently can disable the browser back/forward cache and make pages feel like they "refresh".
+  useEffect(() => {
+    if (!isDirty) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      onSaveDraftRef.current?.();
+      event.preventDefault();
+      event.returnValue = messageRef.current;
+      return messageRef.current;
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [message]);
+  }, [isDirty]);
 
   return {
     isDirty: shouldBlockRef.current,
   };
 }
+

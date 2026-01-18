@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Send, AlertCircle, CheckCircle } from "lucide-react";
 import { DocsLayout } from "@/components/layout/DocsLayout";
 import { Breadcrumb } from "@/components/docs/Breadcrumb";
@@ -44,7 +45,7 @@ export default function ReportIssuePage() {
             شكراً لمساعدتنا في تحسين الدليل. سنراجع ملاحظاتك ونعمل على إصلاح المشكلة.
           </p>
           <Button asChild>
-            <a href="/">العودة للصفحة الرئيسية</a>
+            <Link to="/">العودة للصفحة الرئيسية</Link>
           </Button>
         </div>
       </DocsLayout>
