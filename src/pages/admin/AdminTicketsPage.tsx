@@ -581,8 +581,9 @@ export default function AdminTicketsPage() {
                 <div className="col-span-3">الموضوع</div>
                 <div className="col-span-2">العميل</div>
                 <div className="col-span-1">الأولوية</div>
-                <div className="col-span-2">الحالة</div>
-                <div className="col-span-2">التاريخ</div>
+                <div className="col-span-1">الحالة</div>
+                <div className="col-span-2">الموظف المسؤول</div>
+                <div className="col-span-1">التاريخ</div>
                 <div className="col-span-1">إجراءات</div>
               </div>
 
@@ -648,56 +649,66 @@ export default function AdminTicketsPage() {
                       </div>
 
                       {/* Status */}
+                      <div className="col-span-1">
+                        <Select 
+                          value={ticket.status} 
+                          onValueChange={(v) => handleStatusChange(ticket.id, v)}
+                        >
+                          <SelectTrigger className={cn(
+                            "h-8 text-xs border-0 gap-2 w-[120px]",
+                            status.bg, status.text
+                          )}>
+                            <span className={cn("w-2 h-2 rounded-full", status.dot)} />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="open">جديدة</SelectItem>
+                            <SelectItem value="in_progress">قيد المعالجة</SelectItem>
+                            <SelectItem value="resolved">تم الحل</SelectItem>
+                            <SelectItem value="closed">مغلقة</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Assigned Staff - NEW CLEAR COLUMN */}
                       <div className="col-span-2">
-                        <div className="flex items-center gap-3">
-                          <Select 
-                            value={ticket.status} 
-                            onValueChange={(v) => handleStatusChange(ticket.id, v)}
+                        {ticket.staff ? (
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 flex-1 min-w-0">
+                              <Avatar className="h-6 w-6 border border-emerald-300 shrink-0">
+                                <AvatarFallback className="text-[10px] bg-emerald-100 text-emerald-700 font-semibold">
+                                  {ticket.staff.full_name[0]}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-sm font-medium text-emerald-700 truncate">
+                                {ticket.staff.full_name}
+                              </span>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenAssignDialog(ticket)}
+                              className="h-8 px-2 text-xs gap-1 border-dashed hover:border-primary hover:text-primary shrink-0"
+                            >
+                              <UserPlus className="h-3.5 w-3.5" />
+                              تغيير
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenAssignDialog(ticket)}
+                            className="h-9 px-4 text-xs gap-2 border-dashed border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-400 hover:text-amber-800"
                           >
-                            <SelectTrigger className={cn(
-                              "h-8 text-xs border-0 gap-2 w-[130px]",
-                              status.bg, status.text
-                            )}>
-                              <span className={cn("w-2 h-2 rounded-full", status.dot)} />
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="open">جديدة</SelectItem>
-                              <SelectItem value="in_progress">قيد المعالجة</SelectItem>
-                              <SelectItem value="resolved">تم الحل</SelectItem>
-                              <SelectItem value="closed">مغلقة</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          
-                          {ticket.staff ? (
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <Avatar className="h-6 w-6 border-2 border-emerald-200">
-                                  <AvatarFallback className="text-[10px] bg-emerald-50 text-emerald-700">
-                                    {ticket.staff.full_name[0]}
-                                  </AvatarFallback>
-                                </Avatar>
-                              </TooltipTrigger>
-                              <TooltipContent>{ticket.staff.full_name}</TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <button 
-                                  onClick={() => handleOpenAssignDialog(ticket)}
-                                  className="h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors"
-                                >
-                                  <UserPlus className="h-3 w-3 text-muted-foreground" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>توجيه لموظف</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
+                            <UserPlus className="h-4 w-4" />
+                            توجيه لموظف
+                          </Button>
+                        )}
                       </div>
 
                       {/* Date */}
-                      <div className="col-span-2">
+                      <div className="col-span-1">
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Calendar className="h-3.5 w-3.5" />
                           {formatSmartDate(ticket.created_at)}
