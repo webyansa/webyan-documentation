@@ -677,15 +677,15 @@ export default function AdminTicketsPage() {
                       </div>
 
                       {/* Assign/Reassign Button */}
-                      <div>
+                      <div className="flex justify-start">
                         {ticket.staff ? (
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenAssignDialog(ticket)}
-                            className="h-8 px-3 text-xs gap-1.5 border-dashed hover:border-primary hover:text-primary w-full"
+                            className="h-7 px-2.5 text-xs gap-1 border-dashed hover:border-primary hover:text-primary"
                           >
-                            <UserPlus className="h-3.5 w-3.5" />
+                            <UserPlus className="h-3 w-3" />
                             تغيير
                           </Button>
                         ) : (
@@ -693,9 +693,9 @@ export default function AdminTicketsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenAssignDialog(ticket)}
-                            className="h-8 px-3 text-xs gap-1.5 border-dashed border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-400 w-full"
+                            className="h-7 px-2.5 text-xs gap-1 border-dashed border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-400"
                           >
-                            <UserPlus className="h-3.5 w-3.5" />
+                            <UserPlus className="h-3 w-3" />
                             توجيه
                           </Button>
                         )}
