@@ -62,6 +62,7 @@ const PortalLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
+  const [clientResolvedForUserId, setClientResolvedForUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadNotifications] = useState(0);
@@ -92,10 +93,15 @@ const PortalLayout = () => {
   }, [authStatus, guardTimedOut, location.pathname, location.search, navigate]);
 
   useEffect(() => {
-    if (authStatus === 'authenticated' && user) {
-      fetchClientInfo();
+    const uid = user?.id;
+    if (authStatus === 'authenticated' && uid) {
+      // Fetch client info only ONCE per authenticated user to avoid reload-like behavior
+      // on token refresh / tab switching.
+      if (clientResolvedForUserId !== uid) {
+        fetchClientInfo();
+      }
     }
-  }, [authStatus, user]);
+  }, [authStatus, user?.id, clientResolvedForUserId]);
 
   const redirectNonClient = async () => {
     try {
@@ -123,10 +129,11 @@ const PortalLayout = () => {
     }
   };
 
-  const fetchClientInfo = async () => {
+  const fetchClientInfo = async (opts?: { silent?: boolean }) => {
     if (!user) return;
 
-    setLoading(true);
+    const silent = opts?.silent ?? false;
+    if (!silent) setLoading(true);
 
     const withTimeout = async <T,>(thenable: PromiseLike<T>, ms: number): Promise<T> => {
       return (await Promise.race([
@@ -168,11 +175,20 @@ const PortalLayout = () => {
           organization_id: data.organization_id,
           organization: org,
         });
+        setClientResolvedForUserId(user.id);
       } else {
-        toast.error('ليس لديك صلاحية الوصول لبوابة العملاء');
-        await redirectNonClient();
+        if (!silent) {
+          toast.error('ليس لديك صلاحية الوصول لبوابة العملاء');
+          await redirectNonClient();
+        }
       }
     } catch (error: any) {
+      // Silent refresh failures should NOT bounce the user out or show blocking loaders.
+      if (silent) {
+        console.warn('Silent client info refresh failed:', error);
+        return;
+      }
+
       if (error?.message === 'timeout') {
         toast.error('تعذر التحقق من الحساب، أعد المحاولة');
         navigate('/portal/login?reason=timeout', { replace: true });
@@ -182,7 +198,7 @@ const PortalLayout = () => {
         await redirectNonClient();
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
