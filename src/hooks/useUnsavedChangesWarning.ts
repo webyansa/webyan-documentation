@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useBeforeUnload, useBlocker } from 'react-router-dom';
+import { useBeforeUnload } from 'react-router-dom';
 
 interface UseUnsavedChangesWarningOptions {
   isDirty: boolean;
@@ -14,12 +14,16 @@ export function useUnsavedChangesWarning({
 }: UseUnsavedChangesWarningOptions) {
   const shouldBlockRef = useRef(isDirty);
   shouldBlockRef.current = isDirty;
+  const onSaveDraftRef = useRef(onSaveDraft);
+  onSaveDraftRef.current = onSaveDraft;
 
-  // Block browser close/refresh
+  // Block browser close/refresh using React Router's useBeforeUnload
   useBeforeUnload(
     useCallback(
       (event: BeforeUnloadEvent) => {
         if (shouldBlockRef.current) {
+          // Save draft before unload
+          onSaveDraftRef.current?.();
           event.preventDefault();
           event.returnValue = message;
           return message;
@@ -29,42 +33,22 @@ export function useUnsavedChangesWarning({
     )
   );
 
-  // Block internal navigation using React Router's blocker
-  const blocker = useBlocker(
-    useCallback(
-      ({ currentLocation, nextLocation }) => {
-        return (
-          shouldBlockRef.current &&
-          currentLocation.pathname !== nextLocation.pathname
-        );
-      },
-      []
-    )
-  );
-
-  // Handle navigation block
+  // Also handle regular beforeunload for non-React Router navigation
   useEffect(() => {
-    if (blocker.state === 'blocked') {
-      // Show native confirm dialog
-      const confirmLeave = window.confirm(
-        `${message}\n\nاضغط "موافق" للمغادرة أو "إلغاء" للبقاء.`
-      );
-
-      if (confirmLeave) {
-        // Optionally save draft before leaving
-        if (onSaveDraft) {
-          onSaveDraft();
-        }
-        blocker.proceed();
-      } else {
-        blocker.reset();
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (shouldBlockRef.current) {
+        onSaveDraftRef.current?.();
+        event.preventDefault();
+        event.returnValue = message;
+        return message;
       }
-    }
-  }, [blocker, message, onSaveDraft]);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [message]);
 
   return {
-    isBlocked: blocker.state === 'blocked',
-    proceed: () => blocker.state === 'blocked' && blocker.proceed(),
-    reset: () => blocker.state === 'blocked' && blocker.reset(),
+    isDirty: shouldBlockRef.current,
   };
 }
